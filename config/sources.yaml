@@ -1,0 +1,183 @@
+global:
+  timezone: "Asia/Jerusalem"
+  output_html: "data/rendered/index.html"
+  db_path: "data/state.db"
+  max_items_per_source: 20
+  max_fulltext_fetches_per_run: 15
+  max_claude_batch_items: 25
+  min_hours_between_refetch: 8
+  enable_preview_images: true
+  x_enabled_in_production: false
+
+topic_filters:
+  include_keywords:
+    - ai
+    - llm
+    - language model
+    - multimodal
+    - agent
+    - reasoning
+    - inference
+    - fine-tuning
+    - benchmark
+    - open weights
+    - foundation model
+    - synthetic data
+    - eval
+    - RLHF
+    - tool use
+  exclude_keywords:
+    - celebrity
+    - generic gadget rumor
+    - unrelated politics
+
+image_policy:
+  resolution_order:
+    - media_thumbnail
+    - media_content
+    - enclosure
+    - og_image
+    - first_reasonable_article_image
+  hotlink_original_urls: true
+  download_locally: false
+
+sources:
+  # Primary direct feeds
+  - id: openai_news
+    enabled: true
+    type: rss
+    category: primary
+    name: "OpenAI News"
+    feed_urls:
+      - "https://openai.com/news/rss.xml"
+    tags: ["openai", "primary"]
+
+  - id: anthropic_news
+    enabled: true
+    type: rss
+    category: primary
+    name: "Anthropic News"
+    feed_urls:
+      - "https://www.anthropic.com/news/rss.xml"
+    tags: ["anthropic", "primary"]
+
+  - id: deepmind_blog
+    enabled: true
+    type: rss
+    category: primary
+    name: "Google DeepMind Blog"
+    feed_urls:
+      - "https://deepmind.google/blog/rss.xml"
+    tags: ["deepmind", "primary"]
+
+  - id: google_research_blog
+    enabled: true
+    type: rss
+    category: primary
+    name: "Google Research Blog"
+    feed_urls:
+      - "https://research.google/blog/rss/"
+    tags: ["research", "primary"]
+
+  - id: huggingface_blog
+    enabled: true
+    type: rss
+    category: primary
+    name: "Hugging Face Blog"
+    feed_urls:
+      - "https://huggingface.co/blog/feed.xml"
+    tags: ["huggingface", "open-source"]
+
+  - id: arxiv_ai
+    enabled: true
+    type: arxiv
+    category: research
+    name: "arXiv AI"
+    queries:
+      - "cat:cs.AI"
+      - "cat:cs.CL"
+      - "cat:cs.LG"
+    max_results: 15
+    tags: ["research"]
+
+  - id: medium_ai_topic
+    enabled: true
+    type: medium_rss
+    category: secondary
+    name: "Medium AI Topic"
+    feed_urls:
+      - "https://medium.com/feed/tag/artificial-intelligence"
+      - "https://medium.com/feed/tag/llm"
+      - "https://medium.com/feed/tag/agents"
+    tags: ["medium", "secondary"]
+    enrich_with_browser_if_selected: true
+
+  # Free integrator layer: useful, optional
+  - id: rsshub_custom_sources
+    enabled: false
+    type: rsshub_generic
+    category: optional_integrator
+    name: "RSSHub optional feeds"
+    feed_urls: []
+    tags: ["rsshub", "optional"]
+
+  - id: feedly_manual_validation
+    enabled: false
+    type: external_reader_reference
+    category: optional_integrator
+    name: "Feedly free validation set"
+    tags: ["feedly", "optional"]
+
+  - id: inoreader_manual_validation
+    enabled: false
+    type: external_reader_reference
+    category: optional_integrator
+    name: "Inoreader free validation set"
+    tags: ["inoreader", "optional"]
+
+  # X/Twitter support kept in code, disabled for production
+  - id: x_watch_accounts
+    enabled: false
+    type: x_api_accounts
+    category: optional_social
+    name: "X watched accounts"
+    usernames:
+      - "OpenAI"
+      - "AnthropicAI"
+      - "GoogleDeepMind"
+      - "huggingface"
+      - "ylecun"
+      - "karpathy"
+    tags: ["x", "social", "optional"]
+
+  - id: x_search_topics
+    enabled: false
+    type: x_api_search
+    category: optional_social
+    name: "X topic search"
+    queries:
+      - "\"open weights\" OR \"new model\" OR \"reasoning model\""
+      - "\"AI agent\" OR \"tool use\" OR \"benchmark\""
+      - "\"inference\" OR \"serving\" OR \"vLLM\" OR \"llama.cpp\""
+    tags: ["x", "social", "optional"]
+
+  - id: x_unofficial_fallback
+    enabled: false
+    type: x_unofficial
+    category: experimental
+    name: "X unofficial discovery fallback"
+    tags: ["x", "experimental"]
+
+render:
+  sections:
+    - top_stories
+    - new_since_last_run
+    - by_topic
+    - by_source
+    - image_highlights
+  item_annotation_word_limit: 70
+  keep_days: 14
+  max_top_stories: 12
+  max_items_in_html: 180
+  show_preview_images: true
+
