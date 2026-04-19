@@ -1,15 +1,34 @@
 #!/usr/bin/env bash
+# Cron-ready run script for AI News Agent.
+# Usage: bash scripts/run.sh [--smoke-test] [--skip-claude]
 set -euo pipefail
 
-PROJECT_DIR="${AI_NEWS_AGENT_HOME:-$HOME/git/ai-news-agent}"
-cd "$PROJECT_DIR"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
-if [ -f ".env" ]; then
+# Activate conda environment if available
+if command -v conda &>/dev/null; then
+  CONDA_ENV="${CONDA_ENV:-ai-news}"
+  eval "$(conda shell.bash hook)"
+  conda activate "$CONDA_ENV" 2>/dev/null || true
+fi
+
+cd "$PROJECT_ROOT"
+
+# Load .env if present
+if [ -f "$PROJECT_ROOT/.env" ]; then
   set -a
-  . ./.env
+  # shellcheck disable=SC1091
+  source "$PROJECT_ROOT/.env"
   set +a
 fi
 
-/home/anton/miniconda3/envs/ai-news/bin/python -m src.scheduler_entry >> "/home/anton/data/logs/run-$(date +%F).log" 2>&1
+LOG_DIR="$HOME/logs"
+mkdir -p "$LOG_DIR"
+LOG_FILE="$LOG_DIR/run_$(date +%Y%m%d_%H%M%S).log"
 
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting AI News Agent run" | tee "$LOG_FILE"
 
+python -m src.main "$@" 2>&1 | tee -a "$LOG_FILE"
+
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Run complete. Output: $HOME/news_data/rendered/index.html" | tee -a "$LOG_FILE"

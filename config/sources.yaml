@@ -1,13 +1,15 @@
 global:
   timezone: "Asia/Jerusalem"
-  output_html: "data/rendered/index.html"
-  db_path: "data/state.db"
+  output_html: "~/news_data/rendered/index.html"
+  db_path: "~/news_data/state.db"
   max_items_per_source: 20
   max_fulltext_fetches_per_run: 15
   max_claude_batch_items: 25
   min_hours_between_refetch: 8
   enable_preview_images: true
   x_enabled_in_production: false
+  claude_model: "claude-sonnet-4-6"
+  claude_max_tokens: 4096
 
 topic_filters:
   include_keywords:
