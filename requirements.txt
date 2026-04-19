@@ -1,0 +1,14 @@
+claude-agent-sdk
+anthropic
+httpx
+feedparser
+beautifulsoup4
+lxml
+readability-lxml
+jinja2
+pydantic
+python-dateutil
+PyYAML
+playwright
+tenacity
+pytest
