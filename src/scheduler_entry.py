@@ -25,6 +25,11 @@ try:
 except NameError:
     _PROJECT_ROOT = _find_repo_root(Path(os.getcwd()).resolve())
 
+if _PROJECT_ROOT is not None:
+    _root_str = str(_PROJECT_ROOT)
+    if _root_str not in sys.path:
+        sys.path.insert(0, _root_str)
+
 try:
     from dotenv import load_dotenv  # type: ignore[import-not-found]
     load_dotenv(_PROJECT_ROOT / ".env")
