@@ -6,6 +6,7 @@ import argparse
 import logging
 import os
 import sys
+import tempfile
 from pathlib import Path
 
 def _find_repo_root(start: Path) -> Path | None:
@@ -41,6 +42,7 @@ logger = logging.getLogger("main")
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse and return CLI arguments for the pipeline entry point."""
     parser = argparse.ArgumentParser(description="AI News Agent pipeline")
     parser.add_argument(
         "--smoke-test",
@@ -58,6 +60,17 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Path to sources.yaml (defaults to config/sources.yaml).",
     )
+    parser.add_argument(
+        "--serve",
+        action="store_true",
+        help="Start the local web server instead of running the pipeline.",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8765,
+        help="Port for the local web server (default: 8765).",
+    )
     return parser.parse_args()
 
 
@@ -70,10 +83,13 @@ def main() -> int:
     db_path = Path(os.path.expanduser(config.global_config.db_path))
     output_path = Path(os.path.expanduser(config.global_config.output_html))
 
+    if args.serve:
+        from src.server import serve
+        serve(db_path, output_path, config_path=config_path, port=args.port)
+        return 0
+
     if args.smoke_test:
         logger.info("=== SMOKE TEST MODE ===")
-        import tempfile
-
         config = config.model_copy(
             update={
                 "global_config": config.global_config.model_copy(
@@ -81,7 +97,8 @@ def main() -> int:
                 )
             }
         )
-        tmp = tempfile.mktemp(suffix=".html")
+        fd, tmp = tempfile.mkstemp(suffix=".html")
+        os.close(fd)
         output_path = Path(tmp)
         skip_claude = True
     else:

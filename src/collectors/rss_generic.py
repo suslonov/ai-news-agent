@@ -8,12 +8,15 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import re
+import time
 from datetime import datetime, timezone
 from typing import Optional
 
 import feedparser
 import httpx
 from dateutil import parser as dateutil_parser
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from src.models import ImageSourceType, ItemStatus, NormalizedItem, SourceConfig, TopicFilters
 
@@ -29,8 +32,6 @@ def _parse_dt(value: Optional[str | tuple]) -> Optional[datetime]:
         return None
     if isinstance(value, tuple):
         try:
-            import time
-
             ts = time.mktime(value)
             return datetime.fromtimestamp(ts, tz=timezone.utc)
         except Exception:
@@ -89,8 +90,6 @@ def _extract_image_from_entry(entry: feedparser.FeedParserDict) -> tuple[Optiona
 
 def _scrape_first_img_src(html: str) -> Optional[str]:
     """Extract the first <img src> from an HTML fragment."""
-    import re
-
     m = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', html, re.IGNORECASE)
     if m:
         url = m.group(1)
@@ -117,16 +116,28 @@ def _passes_topic_filter(entry_text: str, filters: TopicFilters) -> bool:
     return True
 
 
+@retry(
+    retry=retry_if_exception_type(httpx.TransportError),
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=1, max=8),
+    reraise=True,
+)
+def _http_get_feed(url: str, timeout: int) -> str:
+    """HTTP GET a feed URL with automatic retries on transport errors."""
+    response = httpx.get(url, timeout=timeout, headers={"User-Agent": _USER_AGENT}, follow_redirects=True)
+    response.raise_for_status()
+    return response.text
+
+
 def fetch_feed(
     url: str,
     timeout: int = _DEFAULT_TIMEOUT,
 ) -> feedparser.FeedParserDict:
     """Fetch and parse a single RSS/Atom feed URL."""
     try:
-        response = httpx.get(url, timeout=timeout, headers={"User-Agent": _USER_AGENT}, follow_redirects=True)
-        response.raise_for_status()
-        return feedparser.parse(response.text)
-    except httpx.HTTPError as exc:
+        text = _http_get_feed(url, timeout)
+        return feedparser.parse(text)
+    except httpx.HTTPStatusError as exc:
         logger.warning("HTTP error fetching feed %s: %s", url, exc)
         return feedparser.parse("")
     except Exception as exc:

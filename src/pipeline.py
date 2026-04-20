@@ -2,19 +2,26 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
 from src import db, dedupe, images, render
-from src.collectors import rss_generic
-from src.models import AppConfig, ItemStatus, NormalizedItem, RunStats
+from src.collectors import medium_browser, medium_rss, rss_generic, rsshub_generic, x_api
+from src.models import AppConfig, NormalizedItem, RunStats
+from src.claude.summarize import annotate_batch, apply_annotations
+from src.settings import get_anthropic_api_key
 
 logger = logging.getLogger(__name__)
 
 
-def _collect_all_sources(config: AppConfig) -> tuple[list[NormalizedItem], list[tuple[str, str]]]:
+def _collect_all_sources(
+    config: AppConfig,
+    db_path: Path,
+    run_id: int,
+) -> tuple[list[NormalizedItem], list[tuple[str, str]]]:
     """Collect from all enabled sources. Failures on individual sources are caught.
 
     Returns (all_items, errors) where errors is a list of (source_id, message).
@@ -26,41 +33,40 @@ def _collect_all_sources(config: AppConfig) -> tuple[list[NormalizedItem], list[
         if not source.enabled:
             continue
 
-        try:
-            if source.type.value in ("rss", "medium_rss", "rsshub_generic"):
-                from src.collectors import rss_generic
+        items: list[NormalizedItem] = []
+        error_msg: Optional[str] = None
 
+        try:
+            if source.type.value == "rss":
                 items = rss_generic.collect(
                     source=source,
                     filters=config.topic_filters,
                     max_items=config.global_config.max_items_per_source,
                 )
-                all_items.extend(items)
+
+            elif source.type.value == "medium_rss":
+                items = medium_rss.collect(
+                    source=source,
+                    filters=config.topic_filters,
+                    max_items=config.global_config.max_items_per_source,
+                )
+
+            elif source.type.value == "rsshub_generic":
+                items = rsshub_generic.collect(
+                    source=source,
+                    filters=config.topic_filters,
+                    max_items=config.global_config.max_items_per_source,
+                )
 
             elif source.type.value == "arxiv":
-                try:
-                    from src.collectors import arxiv_collector
-
-                    items = arxiv_collector.collect(
-                        source=source,
-                        filters=config.topic_filters,
-                        max_items=config.global_config.max_items_per_source,
-                    )
-                    all_items.extend(items)
-                except ImportError:
-                    logger.debug("arxiv collector not available, skipping %s", source.id)
+                logger.warning("Arxiv collector not yet implemented, skipping %s.", source.id)
 
             elif source.type.value in ("x_api_accounts", "x_api_search"):
                 if not config.global_config.x_enabled_in_production:
                     logger.debug("X collector disabled in production, skipping %s", source.id)
                     continue
-                try:
-                    from src.collectors import x_api
 
-                    items = x_api.collect(source=source, filters=config.topic_filters)
-                    all_items.extend(items)
-                except ImportError:
-                    logger.debug("X API collector not available, skipping %s", source.id)
+                items = x_api.collect(source=source, filters=config.topic_filters)
 
             elif source.type.value == "x_unofficial":
                 logger.debug("X unofficial collector is experimental-only, skipping %s", source.id)
@@ -72,9 +78,12 @@ def _collect_all_sources(config: AppConfig) -> tuple[list[NormalizedItem], list[
                 logger.warning("Unknown source type %s for %s, skipping.", source.type.value, source.id)
 
         except Exception as exc:
-            msg = f"{source.id}: {exc}"
+            error_msg = str(exc)
             logger.warning("Collector failed for %s: %s", source.id, exc)
-            errors.append((source.id, str(exc)))
+            errors.append((source.id, error_msg))
+
+        all_items.extend(items)
+        db.log_source_fetch(db_path, run_id, source.id, len(items), error_msg)
 
     return all_items, errors
 
@@ -88,11 +97,11 @@ def run_pipeline(
     """Run the full news aggregation pipeline.
 
     Steps:
-    1. DB init
-    2. Record run start
-    3. Collect from all enabled sources
-    4. Dedupe within batch
-    5. Filter already-seen items from DB
+    1. DB init + record run start
+    2. Collect from all enabled sources (logs source_fetches)
+    3. Dedupe within batch
+    4. Filter already-seen items from DB
+    5. Medium browser enrichment (bounded)
     6. Enrich with page images (bounded)
     7. Persist new items
     8. Claude annotation (optional)
@@ -103,9 +112,10 @@ def run_pipeline(
     db.init_db(db_path)
     run_id = db.mark_run_start(db_path)
     stats = stats.model_copy(update={"run_id": run_id})
+    last_run_at = db.get_previous_run_started_at(db_path, run_id)
 
     # ── 1. Collect ──────────────────────────────────────────────────────────────
-    raw_items, errors = _collect_all_sources(config)
+    raw_items, errors = _collect_all_sources(config, db_path, run_id)
     stats = stats.model_copy(update={"fetched": len(raw_items), "errors": [e[1] for e in errors]})
     logger.info("Collected %d raw items from all sources", len(raw_items))
 
@@ -120,7 +130,13 @@ def run_pipeline(
     new_items, already_seen = dedupe.merge_with_db_seen(deduped, seen_urls, seen_hashes)
     logger.info("New items: %d, already in DB: %d", len(new_items), len(already_seen))
 
-    # ── 4. Image enrichment ────────────────────────────────────────────────────
+    # ── 4. Medium browser enrichment ──────────────────────────────────────────
+    new_items = medium_browser.enrich_batch(
+        new_items,
+        max_fetches=config.global_config.max_fulltext_fetches_per_run,
+    )
+
+    # ── 5. Image enrichment ────────────────────────────────────────────────────
     if config.global_config.enable_preview_images and new_items:
         new_items, image_count = images.enrich_items_with_images(
             new_items,
@@ -129,7 +145,7 @@ def run_pipeline(
         )
         stats = stats.model_copy(update={"image_resolved_count": image_count})
 
-    # ── 5. Persist new items ───────────────────────────────────────────────────
+    # ── 6. Persist new items ───────────────────────────────────────────────────
     for item in new_items:
         try:
             db.upsert_item(db_path, item)
@@ -138,20 +154,21 @@ def run_pipeline(
 
     stats = stats.model_copy(update={"kept": len(new_items)})
 
-    # ── 6. Claude annotation ───────────────────────────────────────────────────
+    # ── 7. Claude annotation ───────────────────────────────────────────────────
     if not skip_claude:
         _annotate_with_claude(config, db_path, stats)
 
-    # ── 7. Render HTML ─────────────────────────────────────────────────────────
+    # ── 8. Render HTML ─────────────────────────────────────────────────────────
     items_for_render = db.get_recent_items(db_path, limit=config.render.max_items_in_html)
     rendered_count = render.render_html(
         items=items_for_render,
         config=config.render,
         output_path=output_path,
+        last_run_at=last_run_at,
     )
     stats = stats.model_copy(update={"rendered_count": rendered_count})
 
-    # ── 8. Close run ───────────────────────────────────────────────────────────
+    # ── 9. Close run ───────────────────────────────────────────────────────────
     finished = datetime.now(timezone.utc)
     stats = stats.model_copy(update={"finished_at": finished})
     db.mark_run_end(db_path, run_id, stats)
@@ -170,17 +187,9 @@ def run_pipeline(
 def _annotate_with_claude(config: AppConfig, db_path: Path, stats: RunStats) -> None:
     """Annotate candidate items with Claude and persist results."""
     try:
-        from src.settings import get_anthropic_api_key
-
         api_key = get_anthropic_api_key()
     except EnvironmentError as exc:
         logger.warning("Skipping Claude annotation: %s", exc)
-        return
-
-    try:
-        from src.claude.summarize import annotate_batch, apply_annotations
-    except ImportError:
-        logger.warning("Claude summarize module not available, skipping annotation.")
         return
 
     candidates = db.get_recent_items(db_path, limit=config.global_config.max_claude_batch_items, status="candidate")
@@ -198,7 +207,6 @@ def _annotate_with_claude(config: AppConfig, db_path: Path, stats: RunStats) -> 
 
     for item in annotated:
         try:
-            import json
 
             db.update_item_annotation(
                 db_path=db_path,

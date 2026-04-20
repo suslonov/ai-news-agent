@@ -26,6 +26,7 @@ def _fmt_date(value: Optional[str]) -> str:
         dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
         return dt.strftime("%b %d, %Y")
     except Exception:
+        logger.debug("Could not parse date %r for display", value)
         return str(value)[:10]
 
 
@@ -36,6 +37,7 @@ def _from_json(value: Optional[str]) -> list:
     try:
         return json.loads(value)
     except Exception:
+        logger.debug("Could not parse tags JSON: %r", value)
         return []
 
 
@@ -71,11 +73,33 @@ def _image_highlights(items: list[dict], max_items: int = 18) -> list[dict]:
     return [i for i in items if i.get("preview_image_url")][:max_items]
 
 
+def _group_by_topic(items: list[dict]) -> dict[str, list[dict]]:
+    """Group items by their topic field; items with no topic go under 'Other'."""
+    groups: dict[str, list[dict]] = defaultdict(list)
+    for item in items:
+        topic = item.get("topic") or "Other"
+        groups[topic].append(item)
+    return dict(sorted(groups.items()))
+
+
+def _new_since_last_run(items: list[dict], last_run_at: Optional[str]) -> list[dict]:
+    """Return items whose first_seen_at is on or after last_run_at."""
+    if not last_run_at:
+        return []
+    result: list[dict] = []
+    for item in items:
+        first_seen = item.get("first_seen_at")
+        if first_seen and first_seen >= last_run_at:
+            result.append(item)
+    return result
+
+
 def render_html(
     items: list[dict],
     config: RenderConfig,
     output_path: Path,
     template_dir: Optional[Path] = None,
+    last_run_at: Optional[str] = None,
 ) -> int:
     """Render items to a static HTML file.
 
@@ -93,15 +117,22 @@ def render_html(
 
     latest = [i for i in kept_items if i.get("id") not in top_ids]
     by_source = _group_by_source(kept_items) if "by_source" in config.sections else {}
+    by_topic = _group_by_topic(kept_items) if "by_topic" in config.sections else {}
     image_highlights = _image_highlights(kept_items) if "image_highlights" in config.sections else []
+    new_since_last = _new_since_last_run(kept_items, last_run_at) if "new_since_last_run" in config.sections else []
 
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+    saved_items = [i for i in kept_items if i.get("is_saved")]
 
     ctx: dict[str, Any] = {
         "top_stories": top_stories,
         "latest_items": latest,
         "by_source": by_source,
+        "by_topic": by_topic,
         "image_highlights": image_highlights,
+        "new_since_last_run": new_since_last,
+        "saved_items": saved_items,
         "generated_at": now,
         "total_items": len(kept_items),
     }

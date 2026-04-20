@@ -147,13 +147,6 @@ class ClaudeAnnotation(BaseModel):
     why_it_matters: str
     priority_score: int = Field(ge=0, le=100)
 
-    @field_validator("annotation")
-    @classmethod
-    def annotation_length(cls, v: str) -> str:
-        words = v.split()
-        if len(words) > 100:
-            return " ".join(words[:100])
-        return v
 
 
 class RunStats(BaseModel):

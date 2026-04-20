@@ -149,12 +149,9 @@ def collect(
 ) -> list[NormalizedItem]:
     """Collect tweets from X API based on source type.
 
-    Returns an empty list if production is not enabled or bearer token is missing.
+    Returns an empty list if bearer token is missing.
+    Production gating is enforced by the pipeline before this function is called.
     """
-    if not _is_production_enabled():
-        logger.info("X production disabled. Skipping source %s.", source.id)
-        return []
-
     bearer_token = _get_bearer_token()
     if not bearer_token:
         logger.warning("X_BEARER_TOKEN not set. Skipping source %s.", source.id)

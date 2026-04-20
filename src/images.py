@@ -30,7 +30,10 @@ def resolve_page_image(
 
     order = policy.resolution_order
     for strategy in order:
-        if strategy == "og_image":
+        if strategy in ("media_thumbnail", "media_content", "enclosure"):
+            # These are feed-level strategies handled by the RSS collector; skip at page level.
+            continue
+        elif strategy == "og_image":
             url = extract_og_image(html, item.url)
             if url:
                 return url, ImageSourceType.og_image
@@ -38,6 +41,8 @@ def resolve_page_image(
             url = extract_first_article_image(html, item.url)
             if url:
                 return url, ImageSourceType.first_article_image
+        else:
+            logger.debug("Unknown image resolution strategy %r, skipping.", strategy)
 
     return None, ImageSourceType.none
 

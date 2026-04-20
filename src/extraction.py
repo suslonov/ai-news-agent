@@ -5,10 +5,11 @@ from __future__ import annotations
 import logging
 import re
 from typing import Optional
-from urllib.parse import urljoin, urlparse, urlunparse
+from urllib.parse import parse_qs, urlencode, urljoin, urlparse, urlunparse
 
 import httpx
 from bs4 import BeautifulSoup
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 logger = logging.getLogger(__name__)
 
@@ -16,18 +17,24 @@ _DEFAULT_TIMEOUT = 15
 _USER_AGENT = "ai-news-agent/1.0 (https://github.com/user/ai-news-agent)"
 
 
+@retry(
+    retry=retry_if_exception_type(httpx.TransportError),
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=1, max=8),
+    reraise=True,
+)
+def _http_get_page(url: str, timeout: int) -> str:
+    """HTTP GET a page URL with automatic retries on transport errors."""
+    resp = httpx.get(url, timeout=timeout, headers={"User-Agent": _USER_AGENT}, follow_redirects=True)
+    resp.raise_for_status()
+    return resp.text
+
+
 def fetch_page(url: str, timeout: int = _DEFAULT_TIMEOUT) -> Optional[str]:
     """Fetch a URL and return the HTML body, or None on error."""
     try:
-        resp = httpx.get(
-            url,
-            timeout=timeout,
-            headers={"User-Agent": _USER_AGENT},
-            follow_redirects=True,
-        )
-        resp.raise_for_status()
-        return resp.text
-    except httpx.HTTPError as exc:
+        return _http_get_page(url, timeout)
+    except httpx.HTTPStatusError as exc:
         logger.warning("HTTP error fetching %s: %s", url, exc)
         return None
     except Exception as exc:
@@ -90,8 +97,6 @@ def _normalize_url(url: str) -> str:
     }
     parsed = urlparse(url)
     if parsed.query:
-        from urllib.parse import parse_qs, urlencode
-
         qs = parse_qs(parsed.query, keep_blank_values=True)
         cleaned = {k: v for k, v in qs.items() if k.lower() not in tracking_params}
         new_query = urlencode(cleaned, doseq=True)

@@ -25,9 +25,11 @@ try:
 except NameError:
     _PROJECT_ROOT = _find_repo_root(Path(os.getcwd()).resolve())
 
-from dotenv import load_dotenv  # type: ignore[import-not-found]
-
-load_dotenv(_PROJECT_ROOT / ".env")
+try:
+    from dotenv import load_dotenv  # type: ignore[import-not-found]
+    load_dotenv(_PROJECT_ROOT / ".env")
+except ImportError:
+    pass
 
 from src import pipeline
 from src.settings import load_config, project_root

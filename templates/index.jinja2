@@ -8,19 +8,23 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg: #0f1117;
-      --surface: #1a1d27;
-      --border: #2a2d3a;
-      --text: #e8e9ed;
-      --muted: #8b8fa8;
-      --accent: #6366f1;
-      --accent-soft: #312e81;
-      --green: #22c55e;
-      --amber: #f59e0b;
-      --red: #ef4444;
-      --tag-bg: #1e2133;
+      --bg: #f5f6fa;
+      --surface: #ffffff;
+      --border: #e2e5ef;
+      --text: #1a1d2e;
+      --muted: #6b7280;
+      --accent: #4f46e5;
+      --accent-soft: #eef2ff;
+      --accent-text: #4338ca;
+      --green: #16a34a;
+      --green-soft: #f0fdf4;
+      --amber: #b45309;
+      --amber-soft: #fffbeb;
+      --red: #dc2626;
+      --tag-bg: #f1f5f9;
+      --tag-text: #475569;
       --radius: 10px;
-      --shadow: 0 2px 8px rgba(0,0,0,.4);
+      --shadow: 0 1px 4px rgba(0,0,0,.07), 0 4px 12px rgba(0,0,0,.05);
     }
 
     body {
@@ -33,42 +37,93 @@
 
     .wrapper { max-width: 1200px; margin: 0 auto; padding: 0 1.5rem 4rem; }
 
+    /* ── Header ─────────────────────────────────────────────────────── */
     header {
-      padding: 2rem 1.5rem 1.5rem;
+      background: var(--surface);
       border-bottom: 1px solid var(--border);
+      padding: 0.9rem 1.5rem;
       margin-bottom: 2rem;
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      flex-wrap: wrap;
       gap: 1rem;
+      flex-wrap: wrap;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      box-shadow: 0 1px 3px rgba(0,0,0,.06);
     }
 
-    .site-title { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; }
+    .site-title { font-size: 1.25rem; font-weight: 700; letter-spacing: -0.02em; white-space: nowrap; }
     .site-title span { color: var(--accent); }
-    .meta { font-size: 0.8rem; color: var(--muted); }
+    .meta { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
 
+    /* ── Tab strip ──────────────────────────────────────────────────── */
+    .tab-strip {
+      display: flex;
+      gap: 0.25rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.2rem;
+    }
+    .tab {
+      padding: 0.3rem 0.85rem;
+      border: none;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      font-weight: 500;
+      cursor: pointer;
+      background: transparent;
+      color: var(--muted);
+      transition: background 0.12s, color 0.12s;
+    }
+    .tab.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+    .tab:hover:not(.active) { color: var(--text); }
+
+    /* ── Re-render button ───────────────────────────────────────────── */
+    .btn-rerender {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.35rem 0.8rem;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      cursor: pointer;
+      background: var(--surface);
+      color: var(--muted);
+      transition: border-color 0.12s, color 0.12s;
+      white-space: nowrap;
+    }
+    .btn-rerender:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-rerender:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-rerender svg { flex-shrink: 0; }
+
+    /* ── Search bar ─────────────────────────────────────────────────── */
     .search-bar {
       display: flex;
       align-items: center;
       gap: 0.5rem;
-      background: var(--surface);
+      background: var(--bg);
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      padding: 0.4rem 0.75rem;
+      padding: 0.35rem 0.75rem;
       width: 100%;
-      max-width: 360px;
+      max-width: 300px;
+      margin-left: auto;
     }
     .search-bar input {
       border: none;
       background: transparent;
       color: var(--text);
-      font-size: 0.9rem;
+      font-size: 0.85rem;
       outline: none;
       width: 100%;
     }
     .search-bar input::placeholder { color: var(--muted); }
 
+    /* ── Section ────────────────────────────────────────────────────── */
     .section { margin-bottom: 3rem; }
     .section-header {
       display: flex;
@@ -78,15 +133,16 @@
       padding-bottom: 0.5rem;
       border-bottom: 1px solid var(--border);
     }
-    .section-title { font-size: 1.1rem; font-weight: 600; }
+    .section-title { font-size: 1rem; font-weight: 600; }
     .section-count {
-      font-size: 0.75rem;
+      font-size: 0.72rem;
       background: var(--tag-bg);
       color: var(--muted);
       padding: 0.1rem 0.5rem;
       border-radius: 999px;
     }
 
+    /* ── Cards grid ─────────────────────────────────────────────────── */
     .cards-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
@@ -101,9 +157,12 @@
       display: flex;
       flex-direction: column;
       max-height: 600px;
-      transition: border-color 0.15s, box-shadow 0.15s;
+      transition: border-color 0.15s, box-shadow 0.15s, opacity 0.2s;
+      box-shadow: var(--shadow);
     }
-    .card:hover { border-color: var(--accent); box-shadow: var(--shadow); }
+    .card:hover { border-color: #c7d2fe; box-shadow: 0 4px 16px rgba(79,70,229,.1); }
+    .card.card--read { opacity: 0.45; }
+    .card.card--read:hover { opacity: 0.75; }
 
     .card-image {
       width: 100%;
@@ -131,9 +190,9 @@
       letter-spacing: 0.02em;
       white-space: nowrap;
     }
-    .badge-source { background: var(--accent-soft); color: #a5b4fc; }
-    .badge-topic  { background: #1a2e1a; color: #86efac; }
-    .badge-top    { background: #3b1e06; color: #fbbf24; }
+    .badge-source { background: var(--accent-soft); color: var(--accent-text); }
+    .badge-topic  { background: var(--green-soft); color: var(--green); }
+    .badge-top    { background: var(--amber-soft); color: var(--amber); }
 
     .card-date { color: var(--muted); }
 
@@ -146,7 +205,7 @@
     .card-title a:hover { color: var(--accent); }
 
     .card-annotation { font-size: 0.82rem; color: var(--muted); line-height: 1.55; }
-    .card-why { font-size: 0.78rem; color: #86efac; font-style: italic; }
+    .card-why { font-size: 0.78rem; color: var(--green); font-style: italic; }
 
     .card-tags {
       display: flex;
@@ -158,18 +217,20 @@
     .tag {
       font-size: 0.68rem;
       background: var(--tag-bg);
-      color: var(--muted);
+      color: var(--tag-text);
       padding: 0.1rem 0.45rem;
       border-radius: 4px;
     }
 
+    /* ── Card footer ────────────────────────────────────────────────── */
     .card-footer {
-      padding: 0.6rem 1rem;
+      padding: 0.5rem 0.75rem;
       border-top: 1px solid var(--border);
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 0.5rem;
+      background: #fafbfe;
     }
     .card-link {
       font-size: 0.75rem;
@@ -179,18 +240,39 @@
     }
     .card-link:hover { text-decoration: underline; }
 
+    .card-actions { display: flex; align-items: center; gap: 0.25rem; }
+
+    .btn-action {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface);
+      cursor: pointer;
+      color: var(--muted);
+      transition: background 0.12s, color 0.12s, border-color 0.12s;
+      flex-shrink: 0;
+    }
+    .btn-action:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+    .btn-save.saved { background: var(--amber-soft); color: var(--amber); border-color: #fcd34d; }
+    .btn-read.read  { background: var(--green-soft); color: var(--green); border-color: #86efac; }
+
     .score { font-size: 0.7rem; color: var(--muted); }
-    .score-high { color: var(--green); }
-    .score-mid  { color: var(--amber); }
+    .score-high { color: var(--green); font-weight: 600; }
+    .score-mid  { color: var(--amber); font-weight: 500; }
     .score-low  { color: var(--muted); }
 
+    /* ── By source / by topic lists ─────────────────────────────────── */
     .source-group { margin-bottom: 1.5rem; }
-    .source-group-title { font-size: 0.85rem; font-weight: 600; color: var(--muted); margin-bottom: 0.5rem; }
-    .source-list { list-style: none; }
+    .source-group-title { font-size: 0.8rem; font-weight: 600; color: var(--muted); margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 0.04em; }
+    .source-list { list-style: none; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
     .source-list li {
-      padding: 0.4rem 0;
+      padding: 0.45rem 0.85rem;
       border-bottom: 1px solid var(--border);
-      font-size: 0.85rem;
+      font-size: 0.84rem;
       display: flex;
       align-items: flex-start;
       gap: 0.6rem;
@@ -200,6 +282,7 @@
     .source-list a:hover { color: var(--accent); }
     .source-date { color: var(--muted); font-size: 0.72rem; flex-shrink: 0; }
 
+    /* ── Image highlights ───────────────────────────────────────────── */
     .image-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
@@ -221,26 +304,38 @@
     .img-card-overlay {
       position: absolute;
       bottom: 0; left: 0; right: 0;
-      background: linear-gradient(transparent, rgba(0,0,0,.85));
+      background: linear-gradient(transparent, rgba(0,0,0,.72));
       padding: 2rem 0.75rem 0.75rem;
     }
     .img-card-title { font-size: 0.8rem; font-weight: 600; line-height: 1.3; }
     .img-card-title a { color: #fff; text-decoration: none; }
 
-    .empty { color: var(--muted); font-size: 0.9rem; padding: 1.5rem 0; }
+    .empty { color: var(--muted); font-size: 0.9rem; padding: 2rem 0; text-align: center; }
+
+    /* ── Spinner ────────────────────────────────────────────────────── */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinning { animation: spin 0.7s linear infinite; }
 
     @media (max-width: 640px) {
       .cards-grid { grid-template-columns: 1fr; }
-      header { flex-direction: column; align-items: flex-start; }
-      .search-bar { max-width: 100%; }
+      header { gap: 0.6rem; }
+      .search-bar { max-width: 100%; margin-left: 0; }
+      .meta { display: none; }
     }
   </style>
 </head>
 <body>
 
-{# ── CARD MACRO — must be defined before first use ──────────────────────── #}
+{# ── CARD MACRO ──────────────────────────────────────────────────────────── #}
 {% macro render_card(item, show_top_badge=False) %}
-<article class="card" data-title="{{ item.title | lower }}" data-source="{{ item.source_id | lower }}" data-topic="{{ (item.topic or '') | lower }}">
+<article class="card{% if item.is_read %} card--read{% endif %}"
+  data-id="{{ item.id }}"
+  data-title="{{ item.title | lower }}"
+  data-source="{{ item.source_id | lower }}"
+  data-topic="{{ (item.topic or '') | lower }}"
+  data-read="{{ item.is_read or 0 }}"
+  data-saved="{{ item.is_saved or 0 }}">
+
   {% if item.preview_image_url %}
   <img class="card-image" src="{{ item.preview_image_url }}" alt="{{ item.title }}" loading="lazy"
        onerror="this.style.display='none'">
@@ -278,23 +373,58 @@
   </div>
 
   <div class="card-footer">
-    <a class="card-link" href="{{ item.url }}" target="_blank" rel="noopener noreferrer">Read →</a>
-    {% if item.priority_score %}
-    <span class="score {% if item.priority_score >= 75 %}score-high{% elif item.priority_score >= 45 %}score-mid{% else %}score-low{% endif %}">
-      {{ item.priority_score }}/100
-    </span>
-    {% endif %}
+    <a class="card-link" href="{{ item.url }}" target="_blank" rel="noopener noreferrer">Open →</a>
+    <div class="card-actions">
+      {# Save button #}
+      <button class="btn-action btn-save{% if item.is_saved %} saved{% endif %}"
+              title="{% if item.is_saved %}Unsave{% else %}Save{% endif %}"
+              data-id="{{ item.id }}" data-saved="{{ item.is_saved or 0 }}">
+        <svg width="13" height="13" viewBox="0 0 20 20" fill="{% if item.is_saved %}currentColor{% else %}none{% endif %}" stroke="currentColor" stroke-width="2">
+          <path d="M5 3h10a1 1 0 0 1 1 1v13l-6-4-6 4V4a1 1 0 0 1 1-1z"/>
+        </svg>
+      </button>
+      {# Read button #}
+      <button class="btn-action btn-read{% if item.is_read %} read{% endif %}"
+              title="{% if item.is_read %}Mark unread{% else %}Mark read{% endif %}"
+              data-id="{{ item.id }}" data-read="{{ item.is_read or 0 }}">
+        <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2">
+          <polyline points="4 10 8 14 16 6"/>
+        </svg>
+      </button>
+      {% if item.priority_score %}
+      <span class="score {% if item.priority_score >= 75 %}score-high{% elif item.priority_score >= 45 %}score-mid{% else %}score-low{% endif %}">
+        {{ item.priority_score }}
+      </span>
+      {% endif %}
+    </div>
   </div>
 </article>
 {% endmacro %}
 
+{# ── HEADER ──────────────────────────────────────────────────────────────── #}
 <header>
   <div>
     <div class="site-title">AI <span>News</span></div>
-    <div class="meta">Generated {{ generated_at }} · {{ total_items }} items</div>
+    <div class="meta">{{ generated_at }} · {{ total_items }} items</div>
   </div>
+
+  <div class="tab-strip">
+    <button class="tab active" id="tab-recent" onclick="switchTab('recent')">Recent</button>
+    <button class="tab" id="tab-saved" onclick="switchTab('saved')">
+      Saved{% if saved_items %} <span style="font-size:0.7em;opacity:.7">({{ saved_items | length }})</span>{% endif %}
+    </button>
+  </div>
+
+  <button class="btn-rerender" id="btn-rerender" title="Re-render from current database">
+    <svg id="rerender-icon" width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M4 4v5h5M16 16v-5h-5"/>
+      <path d="M20 10a10 10 0 0 0-17.4-6.7L4 4M0 10a10 10 0 0 0 17.4 6.7L16 16"/>
+    </svg>
+    Refresh
+  </button>
+
   <div class="search-bar">
-    <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;color:#8b8fa8">
+    <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;color:var(--muted)">
       <circle cx="8" cy="8" r="6"/><line x1="13" y1="13" x2="18" y2="18"/>
     </svg>
     <input id="search-input" type="search" placeholder="Filter articles…" autocomplete="off">
@@ -303,92 +433,245 @@
 
 <div class="wrapper">
 
-  {# ── TOP STORIES ──────────────────────────────────────────── #}
-  {% if top_stories %}
-  <section class="section" data-section="top_stories">
-    <div class="section-header">
-      <h2 class="section-title">⭐ Top Stories</h2>
-      <span class="section-count">{{ top_stories | length }}</span>
-    </div>
-    <div class="cards-grid">
-      {% for item in top_stories %}
-      {{ render_card(item, show_top_badge=True) }}
-      {% endfor %}
-    </div>
-  </section>
-  {% endif %}
+  {# ── RECENT VIEW ──────────────────────────────────────────────────── #}
+  <div id="view-recent">
 
-  {# ── LATEST ITEMS ─────────────────────────────────────────── #}
-  {% if latest_items %}
-  <section class="section" data-section="latest">
-    <div class="section-header">
-      <h2 class="section-title">🕑 Latest</h2>
-      <span class="section-count">{{ latest_items | length }}</span>
-    </div>
-    <div class="cards-grid">
-      {% for item in latest_items %}
-      {{ render_card(item) }}
-      {% endfor %}
-    </div>
-  </section>
-  {% endif %}
-
-  {# ── BY SOURCE ────────────────────────────────────────────── #}
-  {% if by_source %}
-  <section class="section" data-section="by_source">
-    <div class="section-header">
-      <h2 class="section-title">📡 By Source</h2>
-    </div>
-    {% for source_name, source_items in by_source.items() %}
-    <div class="source-group">
-      <div class="source-group-title">{{ source_name }} ({{ source_items | length }})</div>
-      <ul class="source-list">
-        {% for item in source_items %}
-        <li>
-          <span class="source-date">{{ item.published_at | fmt_date if item.published_at else "–" }}</span>
-          <a href="{{ item.url }}" target="_blank" rel="noopener noreferrer" data-title="{{ item.title | lower }}">{{ item.title }}</a>
-        </li>
+    {# Top Stories #}
+    {% if top_stories %}
+    <section class="section" data-section="top_stories">
+      <div class="section-header">
+        <h2 class="section-title">⭐ Top Stories</h2>
+        <span class="section-count">{{ top_stories | length }}</span>
+      </div>
+      <div class="cards-grid">
+        {% for item in top_stories %}
+        {{ render_card(item, show_top_badge=True) }}
         {% endfor %}
-      </ul>
-    </div>
-    {% endfor %}
-  </section>
-  {% endif %}
+      </div>
+    </section>
+    {% endif %}
 
-  {# ── IMAGE HIGHLIGHTS ─────────────────────────────────────── #}
-  {% if image_highlights %}
-  <section class="section" data-section="image_highlights">
-    <div class="section-header">
-      <h2 class="section-title">🖼 Image Highlights</h2>
-      <span class="section-count">{{ image_highlights | length }}</span>
-    </div>
-    <div class="image-grid">
-      {% for item in image_highlights %}
-      <div class="img-card">
-        <img src="{{ item.preview_image_url }}" alt="{{ item.title }}" loading="lazy" onerror="this.closest('.img-card').style.display='none'">
-        <div class="img-card-overlay">
-          <div class="img-card-title">
-            <a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.title }}</a>
-          </div>
-        </div>
+    {# Latest #}
+    {% if latest_items %}
+    <section class="section" data-section="latest">
+      <div class="section-header">
+        <h2 class="section-title">🕑 Latest</h2>
+        <span class="section-count">{{ latest_items | length }}</span>
+      </div>
+      <div class="cards-grid">
+        {% for item in latest_items %}
+        {{ render_card(item) }}
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
+    {# By Source #}
+    {% if by_source %}
+    <section class="section" data-section="by_source">
+      <div class="section-header">
+        <h2 class="section-title">📡 By Source</h2>
+      </div>
+      {% for source_name, source_items in by_source.items() %}
+      <div class="source-group">
+        <div class="source-group-title">{{ source_name }} ({{ source_items | length }})</div>
+        <ul class="source-list">
+          {% for item in source_items %}
+          <li>
+            <span class="source-date">{{ item.published_at | fmt_date if item.published_at else "–" }}</span>
+            <a href="{{ item.url }}" target="_blank" rel="noopener noreferrer" data-title="{{ item.title | lower }}">{{ item.title }}</a>
+          </li>
+          {% endfor %}
+        </ul>
       </div>
       {% endfor %}
-    </div>
-  </section>
-  {% endif %}
+    </section>
+    {% endif %}
 
-  {% if not top_stories and not latest_items %}
-  <div class="empty">No items to display. Run the pipeline to collect news.</div>
-  {% endif %}
+    {# New Since Last Run #}
+    {% if new_since_last_run %}
+    <section class="section" data-section="new_since_last_run">
+      <div class="section-header">
+        <h2 class="section-title">🆕 New Since Last Run</h2>
+        <span class="section-count">{{ new_since_last_run | length }}</span>
+      </div>
+      <div class="cards-grid">
+        {% for item in new_since_last_run %}
+        {{ render_card(item) }}
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
 
-</div>
+    {# By Topic #}
+    {% if by_topic %}
+    <section class="section" data-section="by_topic">
+      <div class="section-header">
+        <h2 class="section-title">🏷 By Topic</h2>
+      </div>
+      {% for topic_name, topic_items in by_topic.items() %}
+      <div class="source-group">
+        <div class="source-group-title">{{ topic_name }} ({{ topic_items | length }})</div>
+        <ul class="source-list">
+          {% for item in topic_items %}
+          <li>
+            <span class="source-date">{{ item.published_at | fmt_date if item.published_at else "–" }}</span>
+            <a href="{{ item.url }}" target="_blank" rel="noopener noreferrer" data-title="{{ item.title | lower }}">{{ item.title }}</a>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endfor %}
+    </section>
+    {% endif %}
+
+    {# Image Highlights #}
+    {% if image_highlights %}
+    <section class="section" data-section="image_highlights">
+      <div class="section-header">
+        <h2 class="section-title">🖼 Image Highlights</h2>
+        <span class="section-count">{{ image_highlights | length }}</span>
+      </div>
+      <div class="image-grid">
+        {% for item in image_highlights %}
+        <div class="img-card">
+          <img src="{{ item.preview_image_url }}" alt="{{ item.title }}" loading="lazy" onerror="this.closest('.img-card').style.display='none'">
+          <div class="img-card-overlay">
+            <div class="img-card-title">
+              <a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.title }}</a>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
+    {% if not top_stories and not latest_items %}
+    <div class="empty">No items to display. Run the pipeline to collect news.</div>
+    {% endif %}
+
+  </div>{# /view-recent #}
+
+  {# ── SAVED VIEW ───────────────────────────────────────────────────── #}
+  <div id="view-saved" style="display:none">
+    <section class="section">
+      <div class="section-header">
+        <h2 class="section-title">🔖 Saved</h2>
+        <span class="section-count">{{ saved_items | length }}</span>
+      </div>
+      {% if saved_items %}
+      <div class="cards-grid">
+        {% for item in saved_items %}
+        {{ render_card(item) }}
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="empty">No saved articles yet. Click the bookmark icon on any card to save it.</div>
+      {% endif %}
+    </section>
+  </div>
+
+</div>{# /wrapper #}
 
 <script>
 (function () {
   "use strict";
-  const input = document.getElementById("search-input");
-  if (!input) return;
 
+  /* ── Tab switching ──────────────────────────────────────────────── */
+  window.switchTab = function (tab) {
+    document.getElementById("view-recent").style.display = tab === "recent" ? "" : "none";
+    document.getElementById("view-saved").style.display  = tab === "saved"  ? "" : "none";
+    document.getElementById("tab-recent").classList.toggle("active", tab === "recent");
+    document.getElementById("tab-saved").classList.toggle("active",  tab === "saved");
+    sessionStorage.setItem("ai-news-tab", tab);
+  };
+
+  // Restore last active tab
+  const savedTab = sessionStorage.getItem("ai-news-tab");
+  if (savedTab === "saved") switchTab("saved");
+
+  /* ── Re-render ──────────────────────────────────────────────────── */
+  const rerenderBtn = document.getElementById("btn-rerender");
+  const rerenderIcon = document.getElementById("rerender-icon");
+
+  rerenderBtn.addEventListener("click", async () => {
+    rerenderBtn.disabled = true;
+    rerenderIcon.classList.add("spinning");
+    rerenderBtn.lastChild.textContent = " Refreshing…";
+    try {
+      const resp = await fetch("/api/re-render", { method: "POST" });
+      if (resp.ok) {
+        window.location.reload();
+      } else {
+        rerenderBtn.lastChild.textContent = " Failed";
+        setTimeout(() => {
+          rerenderBtn.disabled = false;
+          rerenderIcon.classList.remove("spinning");
+          rerenderBtn.lastChild.textContent = " Refresh";
+        }, 2000);
+      }
+    } catch (_) {
+      rerenderBtn.lastChild.textContent = " No server";
+      setTimeout(() => {
+        rerenderBtn.disabled = false;
+        rerenderIcon.classList.remove("spinning");
+        rerenderBtn.lastChild.textContent = " Refresh";
+      }, 2500);
+    }
+  });
+
+  /* ── Save button ────────────────────────────────────────────────── */
+  document.addEventListener("click", async (e) => {
+    const btn = e.target.closest(".btn-save");
+    if (!btn) return;
+    e.preventDefault();
+    const id = parseInt(btn.dataset.id, 10);
+    const isSaved = btn.dataset.saved === "1";
+    try {
+      const resp = await fetch("/api/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, is_saved: !isSaved }),
+      });
+      if (resp.ok) window.location.reload();
+    } catch (_) {
+      console.warn("Save failed — is the local server running?");
+    }
+  });
+
+  /* ── Read button ────────────────────────────────────────────────── */
+  document.addEventListener("click", async (e) => {
+    const btn = e.target.closest(".btn-read");
+    if (!btn) return;
+    e.preventDefault();
+    const id = parseInt(btn.dataset.id, 10);
+    const isRead = btn.dataset.read === "1";
+    try {
+      const resp = await fetch("/api/mark-read", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, is_read: !isRead }),
+      });
+      if (!resp.ok) return;
+      // Update all card instances with this id (card may appear in multiple sections)
+      document.querySelectorAll(`.card[data-id="${id}"]`).forEach(card => {
+        const newRead = !isRead;
+        card.dataset.read = newRead ? "1" : "0";
+        card.classList.toggle("card--read", newRead);
+        const b = card.querySelector(".btn-read");
+        if (b) {
+          b.dataset.read = newRead ? "1" : "0";
+          b.classList.toggle("read", newRead);
+          b.title = newRead ? "Mark unread" : "Mark read";
+        }
+      });
+    } catch (_) {
+      console.warn("Mark-read failed — is the local server running?");
+    }
+  });
+
+  /* ── Search / filter ────────────────────────────────────────────── */
   function debounce(fn, ms) {
     let timer;
     return function (...args) { clearTimeout(timer); timer = setTimeout(() => fn.apply(this, args), ms); };
@@ -396,22 +679,22 @@
 
   function filterCards(query) {
     const q = query.toLowerCase().trim();
-    const cards = document.querySelectorAll(".card, .source-list li");
-    cards.forEach(el => {
-      const title = (el.dataset.title || el.querySelector("a")?.textContent || "").toLowerCase();
+    document.querySelectorAll(".card, .source-list li").forEach(el => {
+      const title  = (el.dataset.title  || el.querySelector("a")?.textContent || "").toLowerCase();
       const source = (el.dataset.source || "").toLowerCase();
-      const topic = (el.dataset.topic || "").toLowerCase();
-      const match = !q || title.includes(q) || source.includes(q) || topic.includes(q);
-      el.style.display = match ? "" : "none";
+      const topic  = (el.dataset.topic  || "").toLowerCase();
+      el.style.display = (!q || title.includes(q) || source.includes(q) || topic.includes(q)) ? "" : "none";
     });
-
     document.querySelectorAll(".section").forEach(section => {
-      const visible = section.querySelectorAll(".card:not([style*='display: none']), .source-list li:not([style*='display: none'])");
-      section.style.display = visible.length === 0 && q ? "none" : "";
+      const visible = section.querySelectorAll(
+        ".card:not([style*='display: none']), .source-list li:not([style*='display: none'])"
+      );
+      section.style.display = (visible.length === 0 && q) ? "none" : "";
     });
   }
 
-  input.addEventListener("input", debounce(e => filterCards(e.target.value), 150));
+  const input = document.getElementById("search-input");
+  if (input) input.addEventListener("input", debounce(e => filterCards(e.target.value), 150));
 })();
 </script>
 </body>

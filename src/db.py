@@ -37,14 +37,16 @@ CREATE TABLE IF NOT EXISTS items (
     topic               TEXT,
     is_top_story        INTEGER DEFAULT 0,
     first_seen_at       TEXT,
-    last_seen_at        TEXT
+    last_seen_at        TEXT,
+    is_read             INTEGER DEFAULT 0,
+    is_saved            INTEGER DEFAULT 0
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_items_canonical_url
     ON items (canonical_url)
     WHERE canonical_url IS NOT NULL;
 
-CREATE INDEX IF NOT EXISTS idx_items_hash
+CREATE UNIQUE INDEX IF NOT EXISTS idx_items_hash
     ON items (hash)
     WHERE hash IS NOT NULL;
 
@@ -83,10 +85,24 @@ def _connect(db_path: Path) -> sqlite3.Connection:
     return conn
 
 
+def _run_migrations(conn: sqlite3.Connection) -> None:
+    """Apply additive schema migrations for columns added after initial release."""
+    migrations = [
+        ("items", "is_read", "INTEGER DEFAULT 0"),
+        ("items", "is_saved", "INTEGER DEFAULT 0"),
+    ]
+    for table, column, definition in migrations:
+        try:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+        except sqlite3.OperationalError:
+            pass  # column already exists
+
+
 def init_db(db_path: Path) -> None:
     """Create all tables and indexes if they do not already exist."""
     with _connect(db_path) as conn:
         conn.executescript(_SCHEMA_SQL)
+        _run_migrations(conn)
     logger.info("Database initialized at %s", db_path)
 
 
@@ -227,6 +243,16 @@ def log_source_fetch(
         )
 
 
+def get_previous_run_started_at(db_path: Path, current_run_id: int) -> Optional[str]:
+    """Return started_at of the most recent completed run before current_run_id, or None."""
+    with _connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT started_at FROM runs WHERE id < ? ORDER BY id DESC LIMIT 1",
+            (current_run_id,),
+        ).fetchone()
+        return row["started_at"] if row else None
+
+
 def item_exists_by_url(db_path: Path, url: str) -> bool:
     """Return True if an item with this canonical_url or url already exists."""
     with _connect(db_path) as conn:
@@ -279,4 +305,22 @@ def update_item_annotation(
                 1 if is_top_story else 0,
                 item_id,
             ),
+        )
+
+
+def set_item_read(db_path: Path, item_id: int, is_read: bool = True) -> None:
+    """Mark an item as read or unread."""
+    with _connect(db_path) as conn:
+        conn.execute(
+            "UPDATE items SET is_read = ? WHERE id = ?",
+            (1 if is_read else 0, item_id),
+        )
+
+
+def set_item_saved(db_path: Path, item_id: int, is_saved: bool = True) -> None:
+    """Save or unsave an item."""
+    with _connect(db_path) as conn:
+        conn.execute(
+            "UPDATE items SET is_saved = ? WHERE id = ?",
+            (1 if is_saved else 0, item_id),
         )
