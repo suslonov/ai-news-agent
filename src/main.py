@@ -85,7 +85,7 @@ def main() -> int:
 
     if args.serve:
         from src.server import serve
-        serve(db_path, output_path, config_path=config_path, port=args.port)
+        serve(config_path=config_path, port=args.port)
         return 0
 
     if args.smoke_test:

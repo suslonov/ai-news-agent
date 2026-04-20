@@ -161,8 +161,6 @@
       box-shadow: var(--shadow);
     }
     .card:hover { border-color: #c7d2fe; box-shadow: 0 4px 16px rgba(79,70,229,.1); }
-    .card.card--read { opacity: 0.45; }
-    .card.card--read:hover { opacity: 0.75; }
 
     .card-image {
       width: 100%;
@@ -328,7 +326,7 @@
 
 {# ── CARD MACRO ──────────────────────────────────────────────────────────── #}
 {% macro render_card(item, show_top_badge=False) %}
-<article class="card{% if item.is_read %} card--read{% endif %}"
+<article class="card"
   data-id="{{ item.id }}"
   data-title="{{ item.title | lower }}"
   data-source="{{ item.source_id | lower }}"
@@ -578,6 +576,8 @@
 (function () {
   "use strict";
 
+  const API_BASE = "{{ api_base }}";
+
   /* ── Tab switching ──────────────────────────────────────────────── */
   window.switchTab = function (tab) {
     document.getElementById("view-recent").style.display = tab === "recent" ? "" : "none";
@@ -600,7 +600,7 @@
     rerenderIcon.classList.add("spinning");
     rerenderBtn.lastChild.textContent = " Refreshing…";
     try {
-      const resp = await fetch("/api/re-render", { method: "POST" });
+      const resp = await fetch(API_BASE + "/api/re-render", { method: "POST" });
       if (resp.ok) {
         window.location.reload();
       } else {
@@ -629,7 +629,7 @@
     const id = parseInt(btn.dataset.id, 10);
     const isSaved = btn.dataset.saved === "1";
     try {
-      const resp = await fetch("/api/save", {
+      const resp = await fetch(API_BASE + "/api/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id, is_saved: !isSaved }),
@@ -648,22 +648,18 @@
     const id = parseInt(btn.dataset.id, 10);
     const isRead = btn.dataset.read === "1";
     try {
-      const resp = await fetch("/api/mark-read", {
+      const resp = await fetch(API_BASE + "/api/mark-read", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id, is_read: !isRead }),
       });
       if (!resp.ok) return;
-      // Update all card instances with this id (card may appear in multiple sections)
+      // Hide all instances of this card immediately; they won't appear after next render.
       document.querySelectorAll(`.card[data-id="${id}"]`).forEach(card => {
-        const newRead = !isRead;
-        card.dataset.read = newRead ? "1" : "0";
-        card.classList.toggle("card--read", newRead);
-        const b = card.querySelector(".btn-read");
-        if (b) {
-          b.dataset.read = newRead ? "1" : "0";
-          b.classList.toggle("read", newRead);
-          b.title = newRead ? "Mark unread" : "Mark read";
+        if (!isRead) {
+          card.style.transition = "opacity 0.3s";
+          card.style.opacity = "0";
+          setTimeout(() => card.closest("li, .card") && card.remove() || card.remove(), 320);
         }
       });
     } catch (_) {

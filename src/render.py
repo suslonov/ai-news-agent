@@ -100,8 +100,12 @@ def render_html(
     output_path: Path,
     template_dir: Optional[Path] = None,
     last_run_at: Optional[str] = None,
+    api_base: str = "",
 ) -> int:
     """Render items to a static HTML file.
+
+    api_base is the URL prefix for API calls in the rendered JS, e.g. "/news"
+    when mounted under ai-home-hub.  Leave empty for standalone use.
 
     Returns the number of items rendered.
     """
@@ -109,7 +113,7 @@ def render_html(
     env = _build_env(tdir)
     template = env.get_template("index.jinja2")
 
-    kept_items = [i for i in items if i.get("status") in ("kept", "candidate")]
+    kept_items = [i for i in items if i.get("status") in ("kept", "candidate") and not i.get("is_read")]
     kept_items = kept_items[: config.max_items_in_html]
 
     top_stories = _pick_top_stories(kept_items, config.max_top_stories) if "top_stories" in config.sections else []
@@ -126,6 +130,7 @@ def render_html(
     saved_items = [i for i in kept_items if i.get("is_saved")]
 
     ctx: dict[str, Any] = {
+        "api_base": api_base,
         "top_stories": top_stories,
         "latest_items": latest,
         "by_source": by_source,
