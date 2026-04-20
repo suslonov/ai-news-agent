@@ -257,6 +257,10 @@
     .btn-action:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
     .btn-save.saved { background: var(--amber-soft); color: var(--amber); border-color: #fcd34d; }
     .btn-read.read  { background: var(--green-soft); color: var(--green); border-color: #86efac; }
+    .btn-important.signaled  { background: #eff6ff; color: #2563eb; border-color: #93c5fd; }
+    .btn-unrelevant.signaled { background: #fef2f2; color: var(--red); border-color: #fca5a5; }
+    .btn-important.consumed,
+    .btn-unrelevant.consumed { opacity: 0.38; cursor: not-allowed; pointer-events: none; }
 
     .score { font-size: 0.7rem; color: var(--muted); }
     .score-high { color: var(--green); font-weight: 600; }
@@ -332,7 +336,9 @@
   data-source="{{ item.source_id | lower }}"
   data-topic="{{ (item.topic or '') | lower }}"
   data-read="{{ item.is_read or 0 }}"
-  data-saved="{{ item.is_saved or 0 }}">
+  data-saved="{{ item.is_saved or 0 }}"
+  data-signal="{{ item.user_signal or '' }}"
+  data-signal-consumed="{{ item.signal_consumed or 0 }}">
 
   {% if item.preview_image_url %}
   <img class="card-image" src="{{ item.preview_image_url }}" alt="{{ item.title }}" loading="lazy"
@@ -387,6 +393,24 @@
               data-id="{{ item.id }}" data-read="{{ item.is_read or 0 }}">
         <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2">
           <polyline points="4 10 8 14 16 6"/>
+        </svg>
+      </button>
+      {# Important button #}
+      <button class="btn-action btn-important{% if item.user_signal == 'important' %} signaled{% endif %}{% if item.signal_consumed %} consumed{% endif %}"
+              title="{% if item.signal_consumed %}Signal locked (already used in distillation){% elif item.user_signal == 'important' %}Remove important signal{% else %}Mark as important{% endif %}"
+              data-id="{{ item.id }}" data-signal="{{ item.user_signal or '' }}"
+              {% if item.signal_consumed %}disabled{% endif %}>
+        <svg width="13" height="13" viewBox="0 0 20 20" fill="{% if item.user_signal == 'important' %}currentColor{% else %}none{% endif %}" stroke="currentColor" stroke-width="2">
+          <polygon points="10 2 12.9 7.6 19 8.5 14.5 12.9 15.6 19 10 16 4.4 19 5.5 12.9 1 8.5 7.1 7.6"/>
+        </svg>
+      </button>
+      {# Unrelevant button #}
+      <button class="btn-action btn-unrelevant{% if item.user_signal == 'unrelevant' %} signaled{% endif %}{% if item.signal_consumed %} consumed{% endif %}"
+              title="{% if item.signal_consumed %}Signal locked (already used in distillation){% elif item.user_signal == 'unrelevant' %}Remove unrelevant signal{% else %}Mark as unrelevant{% endif %}"
+              data-id="{{ item.id }}" data-signal="{{ item.user_signal or '' }}"
+              {% if item.signal_consumed %}disabled{% endif %}>
+        <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2">
+          <line x1="4" y1="4" x2="16" y2="16"/><line x1="16" y1="4" x2="4" y2="16"/>
         </svg>
       </button>
       {% if item.priority_score %}
@@ -664,6 +688,71 @@
       });
     } catch (_) {
       console.warn("Mark-read failed — is the local server running?");
+    }
+  });
+
+  /* ── Signal buttons (important / unrelevant) ───────────────────── */
+  function lockSignalButtons(id) {
+    document.querySelectorAll(`.card[data-id="${id}"]`).forEach(card => {
+      card.dataset.signalConsumed = "1";
+      [".btn-important", ".btn-unrelevant"].forEach(sel => {
+        const b = card.querySelector(sel);
+        if (!b) return;
+        b.classList.add("consumed");
+        b.disabled = true;
+        b.title = "Signal locked (already used in distillation)";
+      });
+    });
+  }
+
+  document.addEventListener("click", async (e) => {
+    const btn = e.target.closest(".btn-important, .btn-unrelevant");
+    if (!btn || btn.disabled) return;
+    e.preventDefault();
+
+    const card = btn.closest(".card");
+    if (card && card.dataset.signalConsumed === "1") return;
+
+    const id = parseInt(btn.dataset.id, 10);
+    const isImportant = btn.classList.contains("btn-important");
+    const targetSignal = isImportant ? "important" : "unrelevant";
+    const currentSignal = btn.dataset.signal || "";
+    const newSignal = currentSignal === targetSignal ? null : targetSignal;
+
+    try {
+      const resp = await fetch(API_BASE + "/api/mark-signal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, signal: newSignal }),
+      });
+
+      if (resp.status === 409) {
+        // Item was consumed between page load and click — lock it now
+        lockSignalButtons(id);
+        return;
+      }
+      if (!resp.ok) return;
+
+      // Update all card instances with this id immediately
+      document.querySelectorAll(`.card[data-id="${id}"]`).forEach(card => {
+        card.dataset.signal = newSignal || "";
+        const impBtn = card.querySelector(".btn-important");
+        const unrBtn = card.querySelector(".btn-unrelevant");
+        if (impBtn) {
+          impBtn.dataset.signal = newSignal || "";
+          impBtn.classList.toggle("signaled", newSignal === "important");
+          const svg = impBtn.querySelector("svg");
+          if (svg) svg.setAttribute("fill", newSignal === "important" ? "currentColor" : "none");
+          impBtn.title = newSignal === "important" ? "Remove important signal" : "Mark as important";
+        }
+        if (unrBtn) {
+          unrBtn.dataset.signal = newSignal || "";
+          unrBtn.classList.toggle("signaled", newSignal === "unrelevant");
+          unrBtn.title = newSignal === "unrelevant" ? "Remove unrelevant signal" : "Mark as unrelevant";
+        }
+      });
+    } catch (_) {
+      console.warn("mark-signal failed — is the local server running?");
     }
   });
 

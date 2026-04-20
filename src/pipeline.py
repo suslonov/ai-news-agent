@@ -12,7 +12,9 @@ from src import db, dedupe, images, render
 from src.collectors import medium_browser, medium_rss, rss_generic, rsshub_generic, x_api
 from src.models import AppConfig, NormalizedItem, RunStats
 from src.claude.summarize import annotate_batch, apply_annotations
+from src.claude.distill import distill_criteria
 from src.settings import get_anthropic_api_key
+from src.x_graph import scanner as x_graph_scanner
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +69,19 @@ def _collect_all_sources(
                     continue
 
                 items = x_api.collect(source=source, filters=config.topic_filters)
+
+            elif source.type.value == "x_graph_scanner":
+                if not config.global_config.x_enabled_in_production:
+                    logger.debug("X graph scanner disabled (ENABLE_X_PRODUCTION=false), skipping %s", source.id)
+                    continue
+
+                items = x_graph_scanner.collect(
+                    source=source,
+                    filters=config.topic_filters,
+                    db_path=db_path,
+                    max_accounts=config.global_config.graph_accounts_to_scan,
+                    max_items=config.global_config.max_items_per_source,
+                )
 
             elif source.type.value == "x_unofficial":
                 logger.debug("X unofficial collector is experimental-only, skipping %s", source.id)
@@ -154,11 +169,16 @@ def run_pipeline(
 
     stats = stats.model_copy(update={"kept": len(new_items)})
 
-    # ── 7. Claude annotation ───────────────────────────────────────────────────
+    # ── 7. Distil user feedback → updated selection criteria ───────────────────
+    if not skip_claude:
+        _distill_criteria_from_signals(config, db_path)
+
+    # ── 8. Claude annotation ───────────────────────────────────────────────────
     if not skip_claude:
         _annotate_with_claude(config, db_path, stats)
+        _enforce_x_top_story_cap(db_path, config.global_config.x_top_story_max_ratio)
 
-    # ── 8. Render HTML ─────────────────────────────────────────────────────────
+    # ── 9. Render HTML ─────────────────────────────────────────────────────────
     items_for_render = db.get_recent_items(db_path, limit=config.render.max_items_in_html)
     rendered_count = render.render_html(
         items=items_for_render,
@@ -168,7 +188,7 @@ def run_pipeline(
     )
     stats = stats.model_copy(update={"rendered_count": rendered_count})
 
-    # ── 9. Close run ───────────────────────────────────────────────────────────
+    # ── 10. Close run ──────────────────────────────────────────────────────────
     finished = datetime.now(timezone.utc)
     stats = stats.model_copy(update={"finished_at": finished})
     db.mark_run_end(db_path, run_id, stats)
@@ -182,6 +202,37 @@ def run_pipeline(
         stats.rendered_count,
     )
     return stats
+
+
+def _distill_criteria_from_signals(config: AppConfig, db_path: Path) -> None:
+    """Update selection criteria by distilling user-signal annotations via LLM."""
+    try:
+        api_key = get_anthropic_api_key()
+    except EnvironmentError as exc:
+        logger.warning("Skipping criteria distillation: %s", exc)
+        return
+
+    items = db.get_items_with_signals(db_path)
+    if not items:
+        return
+
+    distill_criteria(
+        items_with_signals=items,
+        api_key=api_key,
+        db_path=db_path,
+        model=config.global_config.distill_model,
+    )
+
+
+def _enforce_x_top_story_cap(db_path: Path, max_ratio: float) -> None:
+    """Demote excess X/Twitter top stories to stay within the configured ratio."""
+    demoted = db.cap_x_top_stories(db_path, max_ratio=max_ratio)
+    if demoted:
+        logger.info(
+            "X top-story cap (%.0f%%): demoted %d tweet(s) from top stories",
+            max_ratio * 100,
+            demoted,
+        )
 
 
 def _annotate_with_claude(config: AppConfig, db_path: Path, stats: RunStats) -> None:

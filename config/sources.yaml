@@ -10,6 +10,7 @@ global:
   x_enabled_in_production: false
   claude_model: "claude-sonnet-4-6"
   claude_max_tokens: 4096
+  distill_model: "claude-haiku-3-5"
 
 topic_filters:
   include_keywords:
@@ -138,18 +139,13 @@ sources:
     tags: ["inoreader", "optional"]
 
   # X/Twitter support kept in code, disabled for production
+  # Static account watcher — accounts listed in usernames below
   - id: x_watch_accounts
     enabled: false
     type: x_api_accounts
     category: optional_social
-    name: "X watched accounts"
-    usernames:
-      - "OpenAI"
-      - "AnthropicAI"
-      - "GoogleDeepMind"
-      - "huggingface"
-      - "ylecun"
-      - "karpathy"
+    name: "X watched accounts (static)"
+    usernames: []
     tags: ["x", "social", "optional"]
 
   - id: x_search_topics
@@ -162,6 +158,17 @@ sources:
       - "\"AI agent\" OR \"tool use\" OR \"benchmark\""
       - "\"inference\" OR \"serving\" OR \"vLLM\" OR \"llama.cpp\""
     tags: ["x", "social", "optional"]
+
+  # Graph-powered scanner — reads top accounts from the twitter_accounts DB table.
+  # Run scripts/build_x_graph.sh periodically to expand and rescore the graph.
+  # Requires ENABLE_X_PRODUCTION=true and X_BEARER_TOKEN to be set.
+  - id: x_graph_scanner
+    enabled: false
+    type: x_graph_scanner
+    category: optional_social
+    name: "X Graph Scanner"
+    max_results: 50
+    tags: ["x", "social", "graph"]
 
   - id: x_unofficial_fallback
     enabled: false

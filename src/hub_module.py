@@ -14,10 +14,8 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import sys
 from pathlib import Path
-from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +57,8 @@ class NewsModule:
             return self._mark_read(body)
         if method == "POST" and path == "/api/save":
             return self._toggle_save(body)
+        if method == "POST" and path == "/api/mark-signal":
+            return self._mark_signal(body)
         return 404, "text/plain", b"Not found"
 
     # ── Handlers ──────────────────────────────────────────────────────────────
@@ -118,6 +118,24 @@ class NewsModule:
             return 200, "application/json", _json({"ok": True})
         except Exception as exc:
             logger.error("save failed: %s", exc)
+            return 500, "application/json", _json({"ok": False, "error": str(exc)})
+
+    def _mark_signal(self, body: bytes) -> Response:
+        data = _parse_json(body)
+        item_id = data.get("id")
+        if item_id is None:
+            return 400, "application/json", _json({"ok": False, "error": "missing id"})
+        signal = data.get("signal")  # "important" | "unrelevant" | null
+        if signal not in ("important", "unrelevant", None):
+            return 400, "application/json", _json({"ok": False, "error": "signal must be 'important', 'unrelevant', or null"})
+        try:
+            from src import db as database
+            updated = database.set_item_signal(self.db_path, int(item_id), signal)
+            if not updated:
+                return 409, "application/json", _json({"ok": False, "error": "signal already consumed and locked"})
+            return 200, "application/json", _json({"ok": True})
+        except Exception as exc:
+            logger.error("mark-signal failed: %s", exc)
             return 500, "application/json", _json({"ok": False, "error": str(exc)})
 
 

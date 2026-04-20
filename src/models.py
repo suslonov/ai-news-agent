@@ -18,6 +18,7 @@ class SourceType(str, Enum):
     x_api_accounts = "x_api_accounts"
     x_api_search = "x_api_search"
     x_unofficial = "x_unofficial"
+    x_graph_scanner = "x_graph_scanner"
     external_reader_reference = "external_reader_reference"
 
 
@@ -76,6 +77,9 @@ class GlobalConfig(BaseModel):
     x_enabled_in_production: bool = False
     claude_model: str = "claude-sonnet-4-6"
     claude_max_tokens: int = 4096
+    distill_model: str = "claude-opus-4-6"
+    graph_accounts_to_scan: int = 20
+    x_top_story_max_ratio: float = 0.20
 
 
 class TopicFilters(BaseModel):

@@ -1,0 +1,106 @@
+# Twitter/X seed accounts for graph builder.
+# The graph builder reads this file, inserts accounts into twitter_accounts DB table,
+# then expands the graph from these seeds via API or scraping.
+#
+# Categories: research | builder | news | indie
+
+seeds:
+  # ── Research & Academia ──────────────────────────────────────────────────────
+  - handle: karpathy
+    category: research
+
+  - handle: ylecun
+    category: research
+
+  - handle: fchollet
+    category: research
+
+  - handle: hardmaru
+    category: research
+
+  - handle: natolambert
+    category: research
+
+  - handle: drfeifei
+    category: research
+
+  - handle: tegmark
+    category: research
+
+  - handle: jeremyphoward
+    category: research
+
+  - handle: rasbt
+    category: research
+
+  - handle: ilyasut
+    category: research
+
+  - handle: ch402
+    category: research
+
+  # ── AI Company Official Accounts ─────────────────────────────────────────────
+  - handle: OpenAI
+    category: news
+
+  - handle: AnthropicAI
+    category: news
+
+  - handle: GoogleDeepMind
+    category: news
+
+  - handle: huggingface
+    category: news
+
+  - handle: mistralai
+    category: news
+
+  - handle: xai
+    category: news
+
+  - handle: MetaAI
+    category: news
+
+  - handle: DeepSeek_AI
+    category: news
+
+  - handle: cohere
+    category: news
+
+  - handle: GroqInc
+    category: news
+
+  # ── Builders & Practitioners ─────────────────────────────────────────────────
+  - handle: simonw
+    category: builder
+
+  - handle: swyx
+    category: builder
+
+  - handle: abidlabs
+    category: builder
+
+  - handle: ClementDelangue
+    category: builder
+
+  - handle: teknium1
+    category: builder
+
+  - handle: vykthur
+    category: builder
+
+  - handle: amasad
+    category: builder
+
+  # ── AI Media & News ───────────────────────────────────────────────────────────
+  - handle: deeplearningai
+    category: news
+
+  - handle: sama
+    category: news
+
+  - handle: emollick
+    category: news
+
+  - handle: benedictevans
+    category: news

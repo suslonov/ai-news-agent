@@ -1,0 +1,25 @@
+You are helping improve an AI news curation system. The system selects and ranks AI/ML news articles for a technical reader.
+
+A human reader has marked a set of articles as either "important" (positive signal — exactly what they want to see) or "unrelevant" (negative signal — not useful to them).
+
+Your task: synthesize those signals into a concise set of selection criteria that the curation system will use on the NEXT run to pick and rank articles better.
+
+Rules for the output:
+- Produce plain prose or a short bulleted list — no headers, no JSON, no markdown formatting.
+- Keep it under 200 words total.
+- State what kinds of articles should be prioritised (derived from "important" signals).
+- State what kinds of articles should be deprioritised or dropped (derived from "unrelevant" signals).
+- Merge with the existing criteria rather than replacing entirely — preserve any still-valid guidance.
+- Be specific: refer to topics, article types, depth level, or source types where patterns are visible.
+- Do not mention the individual article titles or the fact that they were marked by a human.
+
+Current criteria (to be updated):
+{{ current_criteria }}
+
+Articles marked as IMPORTANT (positive examples — more of this):
+{{ important_items }}
+
+Articles marked as UNRELEVANT (negative examples — less of this):
+{{ unrelevant_items }}
+
+Produce the updated selection criteria now.

@@ -39,7 +39,9 @@ CREATE TABLE IF NOT EXISTS items (
     first_seen_at       TEXT,
     last_seen_at        TEXT,
     is_read             INTEGER DEFAULT 0,
-    is_saved            INTEGER DEFAULT 0
+    is_saved            INTEGER DEFAULT 0,
+    user_signal         TEXT DEFAULT NULL,
+    signal_consumed     INTEGER DEFAULT 0
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_items_canonical_url
@@ -73,6 +75,36 @@ CREATE TABLE IF NOT EXISTS source_fetches (
     item_count  INTEGER DEFAULT 0,
     error       TEXT
 );
+
+CREATE TABLE IF NOT EXISTS twitter_accounts (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    handle              TEXT NOT NULL UNIQUE,
+    category            TEXT DEFAULT 'news',
+    score               REAL DEFAULT 0.0,
+    last_seen           TEXT,
+    source              TEXT DEFAULT 'seed',
+    active              INTEGER DEFAULT 1,
+    added_at            TEXT NOT NULL,
+    last_scored_at      TEXT,
+    appearance_count    INTEGER DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_twitter_accounts_active ON twitter_accounts (active);
+CREATE INDEX IF NOT EXISTS idx_twitter_accounts_score  ON twitter_accounts (score DESC);
+
+CREATE TABLE IF NOT EXISTS twitter_edges (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    from_handle     TEXT NOT NULL,
+    to_handle       TEXT NOT NULL,
+    edge_type       TEXT NOT NULL,
+    weight          REAL DEFAULT 1.0,
+    seen_count      INTEGER DEFAULT 1,
+    first_seen      TEXT NOT NULL,
+    last_seen       TEXT NOT NULL,
+    UNIQUE (from_handle, to_handle, edge_type)
+);
+
+CREATE INDEX IF NOT EXISTS idx_twitter_edges_to ON twitter_edges (to_handle);
 """
 
 
@@ -90,6 +122,8 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
     migrations = [
         ("items", "is_read", "INTEGER DEFAULT 0"),
         ("items", "is_saved", "INTEGER DEFAULT 0"),
+        ("items", "user_signal", "TEXT DEFAULT NULL"),
+        ("items", "signal_consumed", "INTEGER DEFAULT 0"),
     ]
     for table, column, definition in migrations:
         try:
@@ -324,3 +358,203 @@ def set_item_saved(db_path: Path, item_id: int, is_saved: bool = True) -> None:
             "UPDATE items SET is_saved = ? WHERE id = ?",
             (1 if is_saved else 0, item_id),
         )
+
+
+def set_item_signal(db_path: Path, item_id: int, signal: Optional[str]) -> bool:
+    """Set or clear a user signal on an item.
+
+    Returns True if the update was applied, False if the item's signal has
+    already been consumed by a distillation run and can no longer be changed.
+    """
+    with _connect(db_path) as conn:
+        cursor = conn.execute(
+            "UPDATE items SET user_signal = ? WHERE id = ? AND signal_consumed = 0",
+            (signal, item_id),
+        )
+        return cursor.rowcount > 0
+
+
+def mark_signals_consumed(db_path: Path, item_ids: list[int]) -> None:
+    """Lock the user_signal on a batch of items after they have been distilled."""
+    if not item_ids:
+        return
+    placeholders = ",".join("?" * len(item_ids))
+    with _connect(db_path) as conn:
+        conn.execute(
+            f"UPDATE items SET signal_consumed = 1 WHERE id IN ({placeholders})",
+            item_ids,
+        )
+
+
+def get_items_with_signals(db_path: Path) -> list[dict]:
+    """Return items that have a pending (not yet consumed) user signal."""
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            """SELECT id, title, annotation, why_it_matters, topic, user_signal
+               FROM items
+               WHERE user_signal IS NOT NULL AND signal_consumed = 0
+               ORDER BY last_seen_at DESC""",
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+# ── Twitter graph helpers ───────────────────────────────────────────────────────
+
+def upsert_twitter_account(
+    db_path: Path,
+    handle: str,
+    category: str = "news",
+    source: str = "seed",
+) -> None:
+    """Insert a twitter account or update category/source if already present."""
+    now = datetime.utcnow().isoformat()
+    with _connect(db_path) as conn:
+        conn.execute(
+            """INSERT INTO twitter_accounts (handle, category, source, active, added_at)
+               VALUES (?, ?, ?, 1, ?)
+               ON CONFLICT(handle) DO UPDATE SET
+                   category = excluded.category,
+                   source   = CASE WHEN twitter_accounts.source = 'discovered'
+                                   THEN excluded.source ELSE twitter_accounts.source END,
+                   active   = 1""",
+            (handle, category, source, now),
+        )
+
+
+def record_twitter_edge(
+    db_path: Path,
+    from_handle: str,
+    to_handle: str,
+    edge_type: str,
+) -> None:
+    """Insert or bump a twitter graph edge and increment the to_handle appearance_count."""
+    now = datetime.utcnow().isoformat()
+    with _connect(db_path) as conn:
+        conn.execute(
+            """INSERT INTO twitter_edges (from_handle, to_handle, edge_type, first_seen, last_seen)
+               VALUES (?, ?, ?, ?, ?)
+               ON CONFLICT(from_handle, to_handle, edge_type) DO UPDATE SET
+                   seen_count = seen_count + 1,
+                   weight     = weight + 0.5,
+                   last_seen  = excluded.last_seen""",
+            (from_handle, to_handle, edge_type, now, now),
+        )
+        # Bump appearance count for the discovered account
+        conn.execute(
+            """INSERT INTO twitter_accounts (handle, category, source, active, added_at, appearance_count)
+               VALUES (?, 'news', 'discovered', 1, ?, 1)
+               ON CONFLICT(handle) DO UPDATE SET
+                   appearance_count = appearance_count + 1,
+                   last_seen = ?""",
+            (to_handle, now, now),
+        )
+
+
+def update_twitter_scores(db_path: Path) -> None:
+    """Recompute account scores based on appearance_count and in-degree edge weight."""
+    with _connect(db_path) as conn:
+        conn.execute(
+            """UPDATE twitter_accounts SET
+                   score = (
+                       appearance_count * 2.0
+                       + COALESCE((
+                           SELECT SUM(weight)
+                           FROM twitter_edges
+                           WHERE to_handle = twitter_accounts.handle
+                       ), 0.0)
+                   ),
+                   last_scored_at = ?""",
+            (datetime.utcnow().isoformat(),),
+        )
+
+
+def prune_twitter_accounts(
+    db_path: Path,
+    keep_count: int = 150,
+    stale_days: int = 30,
+) -> int:
+    """Deactivate low-scoring or stale accounts. Returns count deactivated."""
+    from datetime import timedelta
+    stale_cutoff = (datetime.utcnow() - timedelta(days=stale_days)).isoformat()
+    with _connect(db_path) as conn:
+        # Deactivate stale accounts (not seen recently, not seed)
+        conn.execute(
+            """UPDATE twitter_accounts SET active = 0
+               WHERE source != 'seed'
+                 AND last_seen IS NOT NULL
+                 AND last_seen < ?""",
+            (stale_cutoff,),
+        )
+        # Keep only the top keep_count active accounts by score (seeds always stay)
+        conn.execute(
+            """UPDATE twitter_accounts SET active = 0
+               WHERE active = 1
+                 AND source != 'seed'
+                 AND id NOT IN (
+                     SELECT id FROM twitter_accounts
+                     WHERE active = 1
+                     ORDER BY score DESC
+                     LIMIT ?
+                 )""",
+            (keep_count,),
+        )
+        row = conn.execute(
+            "SELECT COUNT(*) FROM twitter_accounts WHERE active = 0"
+        ).fetchone()
+        return row[0]
+
+
+def get_top_twitter_accounts(db_path: Path, limit: int = 20) -> list[str]:
+    """Return handles of the top active accounts by score."""
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            "SELECT handle FROM twitter_accounts WHERE active = 1 ORDER BY score DESC, source ASC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [r[0] for r in rows]
+
+
+def get_all_active_twitter_handles(db_path: Path) -> list[str]:
+    """Return all active twitter account handles."""
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            "SELECT handle FROM twitter_accounts WHERE active = 1 ORDER BY score DESC"
+        ).fetchall()
+        return [r[0] for r in rows]
+
+
+def cap_x_top_stories(
+    db_path: Path,
+    max_ratio: float = 0.20,
+    x_source_types: frozenset[str] = frozenset(
+        {"x_api_accounts", "x_api_search", "x_graph_scanner"}
+    ),
+) -> int:
+    """Demote X/Twitter top-story items that exceed max_ratio of all top stories.
+
+    Returns the number of items demoted.
+    """
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            "SELECT id, source_type FROM items WHERE is_top_story = 1 ORDER BY priority_score DESC"
+        ).fetchall()
+
+    total = len(rows)
+    if not total:
+        return 0
+
+    max_x = max(1, int(total * max_ratio))
+    x_items = [r for r in rows if r["source_type"] in x_source_types]
+
+    if len(x_items) <= max_x:
+        return 0
+
+    # Demote the lowest-priority excess X items (list is sorted DESC so last = lowest)
+    excess_ids = [r["id"] for r in x_items[max_x:]]
+    placeholders = ",".join("?" * len(excess_ids))
+    with _connect(db_path) as conn:
+        conn.execute(
+            f"UPDATE items SET is_top_story = 0 WHERE id IN ({placeholders})",
+            excess_ids,
+        )
+    return len(excess_ids)
