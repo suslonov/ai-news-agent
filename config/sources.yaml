@@ -115,6 +115,16 @@ sources:
     tags: ["medium", "secondary"]
     enrich_with_browser_if_selected: true
 
+  - id: towards_data_science
+    enabled: true
+    type: medium_rss
+    category: secondary
+    name: "Towards Data Science"
+    feed_urls:
+      - "https://towardsdatascience.com/feed"
+    tags: ["tds", "medium", "secondary"]
+    enrich_with_browser_if_selected: true
+
   # Free integrator layer: useful, optional
   - id: rsshub_custom_sources
     enabled: false
@@ -149,7 +159,7 @@ sources:
     tags: ["x", "social", "optional"]
 
   - id: x_search_topics
-    enabled: false
+    enabled: true
     type: x_api_search
     category: optional_social
     name: "X topic search"
@@ -163,7 +173,7 @@ sources:
   # Run scripts/build_x_graph.sh periodically to expand and rescore the graph.
   # Requires ENABLE_X_PRODUCTION=true and X_BEARER_TOKEN to be set.
   - id: x_graph_scanner
-    enabled: false
+    enabled: true
     type: x_graph_scanner
     category: optional_social
     name: "X Graph Scanner"

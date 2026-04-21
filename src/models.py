@@ -67,8 +67,8 @@ class GlobalConfig(BaseModel):
     """Global pipeline configuration."""
 
     timezone: str = "UTC"
-    output_html: str = "data/rendered/index.html"
-    db_path: str = "data/state.db"
+    output_html: str = "~/news_data/rendered/index.html"
+    db_path: str = "~/news_data/state.db"
     max_items_per_source: int = 20
     max_fulltext_fetches_per_run: int = 15
     max_claude_batch_items: int = 25
