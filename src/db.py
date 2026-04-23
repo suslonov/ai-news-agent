@@ -124,6 +124,7 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
         ("items", "is_saved", "INTEGER DEFAULT 0"),
         ("items", "user_signal", "TEXT DEFAULT NULL"),
         ("items", "signal_consumed", "INTEGER DEFAULT 0"),
+        ("twitter_accounts", "excluded", "INTEGER DEFAULT 0"),
     ]
     for table, column, definition in migrations:
         try:
@@ -416,7 +417,7 @@ def upsert_twitter_account(
                    category = excluded.category,
                    source   = CASE WHEN twitter_accounts.source = 'discovered'
                                    THEN excluded.source ELSE twitter_accounts.source END,
-                   active   = 1""",
+                   active   = CASE WHEN twitter_accounts.excluded = 1 THEN 0 ELSE 1 END""",
             (handle, category, source, now),
         )
 
@@ -439,13 +440,15 @@ def record_twitter_edge(
                    last_seen  = excluded.last_seen""",
             (from_handle, to_handle, edge_type, now, now),
         )
-        # Bump appearance count for the discovered account
+        # Bump appearance count for the discovered account.
+        # Respect exclusion: never reactivate an excluded handle.
         conn.execute(
             """INSERT INTO twitter_accounts (handle, category, source, active, added_at, appearance_count)
                VALUES (?, 'news', 'discovered', 1, ?, 1)
                ON CONFLICT(handle) DO UPDATE SET
                    appearance_count = appearance_count + 1,
-                   last_seen = ?""",
+                   last_seen = ?,
+                   active = CASE WHEN twitter_accounts.excluded = 1 THEN 0 ELSE twitter_accounts.active END""",
             (to_handle, now, now),
         )
 
@@ -505,13 +508,30 @@ def prune_twitter_accounts(
 
 
 def get_top_twitter_accounts(db_path: Path, limit: int = 20) -> list[str]:
-    """Return handles of the top active accounts by score."""
+    """Return handles of the top active, non-excluded accounts by score."""
     with _connect(db_path) as conn:
         rows = conn.execute(
-            "SELECT handle FROM twitter_accounts WHERE active = 1 ORDER BY score DESC, source ASC LIMIT ?",
+            """SELECT handle FROM twitter_accounts
+               WHERE active = 1 AND (excluded IS NULL OR excluded = 0)
+               ORDER BY score DESC, source ASC LIMIT ?""",
             (limit,),
         ).fetchall()
         return [r[0] for r in rows]
+
+
+def exclude_twitter_account(db_path: Path, handle: str) -> None:
+    """Mark an account as excluded from scanning and graph expansion.
+
+    The account is also deactivated so it is no longer scored or expanded.
+    Exclusion survives re-seeding because the excluded flag is preserved by
+    the ON CONFLICT upsert in upsert_twitter_account.
+    """
+    with _connect(db_path) as conn:
+        conn.execute(
+            "UPDATE twitter_accounts SET excluded = 1, active = 0 WHERE handle = ?",
+            (handle.lower().lstrip("@"),),
+        )
+    logger.info("Twitter account @%s excluded from scanning.", handle)
 
 
 def get_all_active_twitter_handles(db_path: Path) -> list[str]:

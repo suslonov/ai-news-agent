@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 def collect(
     source: SourceConfig,
     filters: TopicFilters,
+    user_agent: str,
     max_items: int = 20,
 ) -> list[NormalizedItem]:
     """Collect from an RSSHub-hosted feed.
@@ -30,7 +31,7 @@ def collect(
 
     logger.info("Fetching RSSHub source: %s (%d feeds)", source.id, len(source.feed_urls))
     try:
-        return rss_collect(source=source, filters=filters, max_items=max_items)
+        return rss_collect(source=source, filters=filters, user_agent=user_agent, max_items=max_items)
     except Exception as exc:
         logger.warning("RSSHub collector failed for %s: %s", source.id, exc)
         return []

@@ -23,7 +23,13 @@ if [ -f "$PROJECT_ROOT/.env" ]; then
   set +a
 fi
 
-LOG_DIR="$HOME/logs"
+LOG_DIR="$(python -c "
+import os, sys
+sys.path.insert(0, '$PROJECT_ROOT')
+from src.settings import load_config
+c = load_config()
+print(os.path.expanduser(c.global_config.log_dir))
+" 2>/dev/null || echo "$HOME/logs")"
 mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/run_$(date +%Y%m%d_%H%M%S).log"
 

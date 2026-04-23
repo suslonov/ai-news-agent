@@ -261,6 +261,9 @@
     .btn-unrelevant.signaled { background: #fef2f2; color: var(--red); border-color: #fca5a5; }
     .btn-important.consumed,
     .btn-unrelevant.consumed { opacity: 0.38; cursor: not-allowed; pointer-events: none; }
+    .btn-exclude-x { color: var(--muted); }
+    .btn-exclude-x:hover { border-color: var(--red); color: var(--red); background: #fef2f2; }
+    .btn-exclude-x.excluded { background: #fef2f2; color: var(--red); border-color: #fca5a5; opacity: 0.75; cursor: not-allowed; pointer-events: none; }
 
     .score { font-size: 0.7rem; color: var(--muted); }
     .score-high { color: var(--green); font-weight: 600; }
@@ -334,11 +337,13 @@
   data-id="{{ item.id }}"
   data-title="{{ item.title | lower }}"
   data-source="{{ item.source_id | lower }}"
+  data-source-type="{{ item.source_type | lower }}"
   data-topic="{{ (item.topic or '') | lower }}"
   data-read="{{ item.is_read or 0 }}"
   data-saved="{{ item.is_saved or 0 }}"
   data-signal="{{ item.user_signal or '' }}"
-  data-signal-consumed="{{ item.signal_consumed or 0 }}">
+  data-signal-consumed="{{ item.signal_consumed or 0 }}"
+  data-x-handle="{{ (item.author or '') | replace('@', '') | lower }}">
 
   {% if item.preview_image_url %}
   <img class="card-image" src="{{ item.preview_image_url }}" alt="{{ item.title }}" loading="lazy"
@@ -413,6 +418,17 @@
           <line x1="4" y1="4" x2="16" y2="16"/><line x1="16" y1="4" x2="4" y2="16"/>
         </svg>
       </button>
+      {# Exclude X account button — only for tweets #}
+      {% if item.source_type in ('x_graph_scanner', 'x_api_accounts', 'x_api_search') and item.author %}
+      <button class="btn-action btn-exclude-x"
+              title="Exclude @{{ (item.author or '') | replace('@', '') }} from X scanning and graph"
+              data-handle="{{ (item.author or '') | replace('@', '') | lower }}">
+        <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="10" cy="10" r="8"/>
+          <line x1="4" y1="4" x2="16" y2="16"/>
+        </svg>
+      </button>
+      {% endif %}
       {% if item.priority_score %}
       <span class="score {% if item.priority_score >= 75 %}score-high{% elif item.priority_score >= 45 %}score-mid{% else %}score-low{% endif %}">
         {{ item.priority_score }}
@@ -780,6 +796,35 @@
 
   const input = document.getElementById("search-input");
   if (input) input.addEventListener("input", debounce(e => filterCards(e.target.value), 150));
+
+  /* ── Exclude X account button ────────────────────────────────── */
+  document.addEventListener("click", async (e) => {
+    const btn = e.target.closest(".btn-exclude-x");
+    if (!btn || btn.classList.contains("excluded")) return;
+    e.preventDefault();
+    const handle = btn.dataset.handle;
+    if (!handle) return;
+    if (!confirm(`Exclude @${handle} from all X/Twitter scanning and graph building?`)) return;
+    try {
+      const resp = await fetch(API_BASE + "/api/exclude-x-account", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ handle }),
+      });
+      if (resp.ok) {
+        // Mark all exclude buttons for this handle as excluded
+        document.querySelectorAll(`.btn-exclude-x[data-handle="${handle}"]`).forEach(b => {
+          b.classList.add("excluded");
+          b.title = `@${handle} is excluded`;
+          b.disabled = true;
+        });
+      } else {
+        console.warn("exclude-x-account failed:", await resp.text());
+      }
+    } catch (_) {
+      console.warn("exclude-x-account failed — is the local server running?");
+    }
+  });
 })();
 </script>
 </body>

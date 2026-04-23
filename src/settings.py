@@ -41,6 +41,10 @@ def load_config(config_path: Optional[Path] = None) -> AppConfig:
         global_overrides["claude_model"] = v
     if (v := os.environ.get("CLAUDE_MAX_TOKENS")):
         global_overrides["claude_max_tokens"] = int(v)
+    if (v := os.environ.get("DISTILL_MODEL")):
+        global_overrides["distill_model"] = v
+    if (v := os.environ.get("DISTILL_MAX_TOKENS")):
+        global_overrides["distill_max_tokens"] = int(v)
 
     if global_overrides:
         updated = cfg.global_config.model_copy(update=global_overrides)

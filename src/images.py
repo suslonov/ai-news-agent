@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 def resolve_page_image(
     item: NormalizedItem,
     policy: ImagePolicy,
+    user_agent: str,
     timeout: int = 8,
 ) -> tuple[Optional[str], ImageSourceType]:
     """Attempt to resolve a preview image URL for an item using its article page.
@@ -24,7 +25,7 @@ def resolve_page_image(
     if item.preview_image_url:
         return item.preview_image_url, item.image_source_type
 
-    html = fetch_page(item.url, timeout=timeout)
+    html = fetch_page(item.url, user_agent, timeout=timeout)
     if not html:
         return None, ImageSourceType.none
 
@@ -50,6 +51,7 @@ def resolve_page_image(
 def enrich_items_with_images(
     items: list[NormalizedItem],
     policy: ImagePolicy,
+    user_agent: str,
     max_fetches: int = 15,
     timeout: int = 8,
 ) -> tuple[list[NormalizedItem], int]:
@@ -74,7 +76,7 @@ def enrich_items_with_images(
             continue
 
         fetches += 1
-        url, src_type = resolve_page_image(item, policy, timeout)
+        url, src_type = resolve_page_image(item, policy, user_agent, timeout)
         if url:
             resolved += 1
             item = item.model_copy(update={"preview_image_url": url, "image_source_type": src_type})

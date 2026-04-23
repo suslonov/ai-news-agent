@@ -19,26 +19,19 @@ import httpx
 import yaml
 
 from src import db
+from src.collectors.x_common import DEFAULT_TIMEOUT, get_bearer_token
 from src.x_graph.models import TwitterSeedsConfig
 
 logger = logging.getLogger(__name__)
 
-_X_API_BASE = "https://api.twitter.com/2"
-_DEFAULT_TIMEOUT = 15
 _MENTION_RE = re.compile(r"@(\w{1,50})")
 
-# Edge types used during expansion
 _EDGE_MENTION = "mention"
 _EDGE_RETWEET = "retweet"
 
 
 def _is_x_enabled() -> bool:
     return os.environ.get("ENABLE_X_PRODUCTION", "false").lower() in ("true", "1", "yes")
-
-
-def _get_bearer_token() -> Optional[str]:
-    token = os.environ.get("X_BEARER_TOKEN", "").strip()
-    return token or None
 
 
 def load_seeds(seeds_path: Path) -> TwitterSeedsConfig:
@@ -59,35 +52,40 @@ def seed_db(db_path: Path, seeds_path: Path) -> int:
     return len(config.seeds)
 
 
-def _fetch_user_tweets(handle: str, bearer_token: str, max_results: int = 50) -> list[dict]:
+def _fetch_user_tweets(
+    handle: str,
+    bearer_token: str,
+    api_base: str,
+    max_results: int = 50,
+) -> list[dict]:
     """Fetch recent tweets for a user via X API v2.
 
+    Uses referenced_tweets expansion needed for RT edge detection.
     Returns raw tweet objects or [] on any error.
     """
     headers = {"Authorization": f"Bearer {bearer_token}"}
     try:
         resp = httpx.get(
-            f"{_X_API_BASE}/users/by/username/{handle}",
+            f"{api_base}/users/by/username/{handle}",
             headers=headers,
-            timeout=_DEFAULT_TIMEOUT,
+            timeout=DEFAULT_TIMEOUT,
         )
         resp.raise_for_status()
         user_id = resp.json()["data"]["id"]
 
         resp = httpx.get(
-            f"{_X_API_BASE}/users/{user_id}/tweets",
+            f"{api_base}/users/{user_id}/tweets",
             headers=headers,
             params={
                 "max_results": min(max_results, 100),
                 "tweet.fields": "created_at,author_id,text,referenced_tweets",
                 "expansions": "author_id,referenced_tweets.id.author_id",
             },
-            timeout=_DEFAULT_TIMEOUT,
+            timeout=DEFAULT_TIMEOUT,
         )
         resp.raise_for_status()
         data = resp.json()
         tweets = data.get("data", [])
-        # Attach username for convenience
         for t in tweets:
             t["_username"] = handle
         return tweets
@@ -114,13 +112,14 @@ def expand_from_account(
     db_path: Path,
     handle: str,
     bearer_token: str,
+    api_base: str,
     max_tweets: int = 50,
 ) -> int:
     """Fetch recent tweets for one account and record mention/RT edges.
 
     Returns the number of new edges recorded.
     """
-    tweets = _fetch_user_tweets(handle, bearer_token, max_results=max_tweets)
+    tweets = _fetch_user_tweets(handle, bearer_token, api_base, max_results=max_tweets)
     edges_recorded = 0
     for tweet in tweets:
         text = tweet.get("text", "")
@@ -140,6 +139,7 @@ def expand_from_account(
 def run_graph_build(
     db_path: Path,
     seeds_path: Path,
+    api_base: str,
     max_accounts_to_expand: int = 30,
     max_tweets_per_account: int = 50,
     keep_count: int = 150,
@@ -162,7 +162,7 @@ def run_graph_build(
         )
         return summary
 
-    bearer_token = _get_bearer_token()
+    bearer_token = get_bearer_token()
     if not bearer_token:
         logger.warning("X_BEARER_TOKEN not set. Graph expansion skipped.")
         return summary
@@ -172,7 +172,7 @@ def run_graph_build(
 
     total_edges = 0
     for handle in handles_to_expand:
-        edges = expand_from_account(db_path, handle, bearer_token, max_tweets=max_tweets_per_account)
+        edges = expand_from_account(db_path, handle, bearer_token, api_base, max_tweets=max_tweets_per_account)
         total_edges += edges
         logger.debug("@%s: %d edges recorded", handle, edges)
 

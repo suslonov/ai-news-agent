@@ -59,6 +59,8 @@ class NewsModule:
             return self._toggle_save(body)
         if method == "POST" and path == "/api/mark-signal":
             return self._mark_signal(body)
+        if method == "POST" and path == "/api/exclude-x-account":
+            return self._exclude_x_account(body)
         return 404, "text/plain", b"Not found"
 
     # ── Handlers ──────────────────────────────────────────────────────────────
@@ -118,6 +120,19 @@ class NewsModule:
             return 200, "application/json", _json({"ok": True})
         except Exception as exc:
             logger.error("save failed: %s", exc)
+            return 500, "application/json", _json({"ok": False, "error": str(exc)})
+
+    def _exclude_x_account(self, body: bytes) -> Response:
+        data = _parse_json(body)
+        handle = data.get("handle", "").strip().lstrip("@")
+        if not handle:
+            return 400, "application/json", _json({"ok": False, "error": "missing handle"})
+        try:
+            from src import db as database
+            database.exclude_twitter_account(self.db_path, handle)
+            return 200, "application/json", _json({"ok": True, "handle": handle})
+        except Exception as exc:
+            logger.error("exclude-x-account failed: %s", exc)
             return 500, "application/json", _json({"ok": False, "error": str(exc)})
 
     def _mark_signal(self, body: bytes) -> Response:

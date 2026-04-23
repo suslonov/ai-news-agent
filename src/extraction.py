@@ -14,7 +14,6 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ex
 logger = logging.getLogger(__name__)
 
 _DEFAULT_TIMEOUT = 15
-_USER_AGENT = "ai-news-agent/1.0 (https://github.com/user/ai-news-agent)"
 
 
 @retry(
@@ -23,17 +22,17 @@ _USER_AGENT = "ai-news-agent/1.0 (https://github.com/user/ai-news-agent)"
     wait=wait_exponential(multiplier=1, min=1, max=8),
     reraise=True,
 )
-def _http_get_page(url: str, timeout: int) -> str:
+def _http_get_page(url: str, timeout: int, user_agent: str) -> str:
     """HTTP GET a page URL with automatic retries on transport errors."""
-    resp = httpx.get(url, timeout=timeout, headers={"User-Agent": _USER_AGENT}, follow_redirects=True)
+    resp = httpx.get(url, timeout=timeout, headers={"User-Agent": user_agent}, follow_redirects=True)
     resp.raise_for_status()
     return resp.text
 
 
-def fetch_page(url: str, timeout: int = _DEFAULT_TIMEOUT) -> Optional[str]:
+def fetch_page(url: str, user_agent: str, timeout: int = _DEFAULT_TIMEOUT) -> Optional[str]:
     """Fetch a URL and return the HTML body, or None on error."""
     try:
-        return _http_get_page(url, timeout)
+        return _http_get_page(url, timeout, user_agent)
     except httpx.HTTPStatusError as exc:
         logger.warning("HTTP error fetching %s: %s", url, exc)
         return None

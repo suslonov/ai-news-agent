@@ -22,6 +22,7 @@ def _parse_annotations(raw_json: str, expected_ids: list[str]) -> dict[str, Clau
         data = json.loads(raw_json)
     except json.JSONDecodeError as exc:
         logger.warning("Claude returned invalid JSON: %s", exc)
+        logger.warning("Claude returned JSON: %s", raw_json)
         return {}
 
     if not isinstance(data, list):
@@ -68,8 +69,8 @@ def _items_to_prompt_dicts(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def annotate_batch(
     items: list[dict[str, Any]],
     api_key: str,
-    model: str = "claude-sonnet-4-6",
-    max_tokens: int = 4096,
+    model: str,
+    max_tokens: int,
 ) -> dict[str, ClaudeAnnotation]:
     """Send a batch of items to Claude for annotation.
 
@@ -96,10 +97,44 @@ def annotate_batch(
             max_tokens=max_tokens,
             messages=[{"role": "user", "content": prompt}],
         )
-        raw_text = message.content[0].text
     except Exception as exc:
         logger.error("Claude API call failed: %s", exc)
         return {}
+
+    usage = getattr(message, "usage", None)
+    logger.info(
+        "Claude usage — model: %s  in: %s  out: %s  stop: %s",
+        model,
+        getattr(usage, "input_tokens", "?"),
+        getattr(usage, "output_tokens", "?"),
+        getattr(message, "stop_reason", "?"),
+    )
+
+    stop_reason = getattr(message, "stop_reason", None)
+    if stop_reason == "max_tokens":
+        logger.warning(
+            "Claude response was truncated (stop_reason=max_tokens). "
+            "Increase claude_max_tokens or reduce batch size."
+        )
+
+    text_blocks = [b for b in message.content if getattr(b, "type", None) == "text"]
+    if not text_blocks:
+        logger.error(
+            "Claude returned no text content blocks (stop_reason=%s, blocks=%r)",
+            stop_reason,
+            [getattr(b, "type", b) for b in message.content],
+        )
+        return {}
+
+    raw_text = text_blocks[0].text
+    logger.debug("Claude raw response (%d chars): %.300s", len(raw_text), raw_text)
+
+    # Strip accidental markdown code fences that some model versions emit
+    stripped = raw_text.strip()
+    if stripped.startswith("```"):
+        lines = stripped.splitlines()
+        inner = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
+        raw_text = inner.strip()
 
     annotations = _parse_annotations(raw_text, expected_ids)
     logger.info(

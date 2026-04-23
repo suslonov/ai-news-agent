@@ -7,6 +7,7 @@ alwaysApply: true
 - Write comments only in complex logic. No need to comment every line of code, no need to comment all entities.
 - Put import statements at the beginning of the module. Never put them inside a loop
 - Do not use "return" in main(), if not needed for the design, use exit()
+- Never hardcode default values for settings, app should fail for incorrect settings
 
 - Prioritize error handling and edge cases:
   - Handle errors and edge cases at the beginning of functions.

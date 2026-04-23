@@ -76,6 +76,7 @@ def main() -> None:
     summary = run_graph_build(
         db_path=db_path,
         seeds_path=seeds_path,
+        api_base=app_config.global_config.x_api_base_url,
         max_accounts_to_expand=args.max_accounts,
         max_tweets_per_account=args.max_tweets,
         keep_count=args.keep,

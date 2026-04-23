@@ -86,7 +86,7 @@ def main() -> int:
     if args.serve:
         from src.server import serve
         serve(config_path=config_path, port=args.port)
-        return 0
+        exit(0)
 
     if args.smoke_test:
         logger.info("=== SMOKE TEST MODE ===")
@@ -116,10 +116,10 @@ def main() -> int:
         )
         if args.smoke_test:
             logger.info("Smoke test HTML written to: %s", output_path)
-        return 0
+        exit(0)
     except Exception as exc:
         logger.error("Pipeline failed: %s", exc, exc_info=True)
-        return 1
+        exit(1)
 
 
 if __name__ == "__main__":

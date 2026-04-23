@@ -4,13 +4,23 @@ global:
   db_path: "~/news_data/state.db"
   max_items_per_source: 20
   max_fulltext_fetches_per_run: 15
-  max_claude_batch_items: 25
+  max_claude_batch_items: 40
   min_hours_between_refetch: 8
   enable_preview_images: true
-  x_enabled_in_production: false
+  x_enabled_in_production: true
   claude_model: "claude-sonnet-4-6"
-  claude_max_tokens: 4096
-  distill_model: "claude-haiku-3-5"
+  claude_max_tokens: 8192
+  distill_model: "claude-sonnet-4-6"
+  distill_max_tokens: 1024
+  graph_accounts_to_scan: 20
+  x_top_story_max_ratio: 0.20
+  x_api_base_url: "https://api.twitter.com/2"
+  x_tweet_base_url: "https://x.com"
+  arxiv_api_base_url: "https://export.arxiv.org/api"
+  user_agent: "ai-news-agent/1.0 (https://github.com/user/ai-news-agent)"
+  log_dir: "~/logs"
+  checker_model: "claude-sonnet-4-6"
+  checker_max_tokens: 4096
 
 topic_filters:
   include_keywords:
@@ -56,7 +66,9 @@ sources:
     tags: ["openai", "primary"]
 
   - id: anthropic_news
-    enabled: true
+    # Disabled: Anthropic does not publish an RSS feed (all known paths return 404).
+    # Monitor https://www.anthropic.com/news for a feed link; re-enable when available.
+    enabled: false
     type: rss
     category: primary
     name: "Anthropic News"
@@ -121,7 +133,7 @@ sources:
     category: secondary
     name: "Towards Data Science"
     feed_urls:
-      - "https://towardsdatascience.com/feed"
+      - "https://medium.com/feed/towards-data-science"
     tags: ["tds", "medium", "secondary"]
     enrich_with_browser_if_selected: true
 
@@ -148,7 +160,7 @@ sources:
     name: "Inoreader free validation set"
     tags: ["inoreader", "optional"]
 
-  # X/Twitter support kept in code, disabled for production
+  # X/Twitter is enabled (x_enabled_in_production: true). Bearer token required.
   # Static account watcher — accounts listed in usernames below
   - id: x_watch_accounts
     enabled: false
@@ -163,6 +175,8 @@ sources:
     type: x_api_search
     category: optional_social
     name: "X topic search"
+    # min 10 per Twitter API v2 recent search requirement
+    max_results: 10
     queries:
       - "\"open weights\" OR \"new model\" OR \"reasoning model\""
       - "\"AI agent\" OR \"tool use\" OR \"benchmark\""
@@ -170,8 +184,9 @@ sources:
     tags: ["x", "social", "optional"]
 
   # Graph-powered scanner — reads top accounts from the twitter_accounts DB table.
-  # Run scripts/build_x_graph.sh periodically to expand and rescore the graph.
-  # Requires ENABLE_X_PRODUCTION=true and X_BEARER_TOKEN to be set.
+  # Only COLLECTS tweets from existing accounts; graph expansion (seeding,
+  # scoring, pruning) runs separately via scripts/build_x_graph.sh.
+  # Requires X_BEARER_TOKEN to be set.
   - id: x_graph_scanner
     enabled: true
     type: x_graph_scanner

@@ -64,22 +64,30 @@ class SourceConfig(BaseModel):
 
 
 class GlobalConfig(BaseModel):
-    """Global pipeline configuration."""
+    """Global pipeline configuration. All values must be supplied via sources.yaml."""
 
-    timezone: str = "UTC"
-    output_html: str = "~/news_data/rendered/index.html"
-    db_path: str = "~/news_data/state.db"
-    max_items_per_source: int = 20
-    max_fulltext_fetches_per_run: int = 15
-    max_claude_batch_items: int = 25
-    min_hours_between_refetch: int = 8
-    enable_preview_images: bool = True
-    x_enabled_in_production: bool = False
-    claude_model: str = "claude-sonnet-4-6"
-    claude_max_tokens: int = 4096
-    distill_model: str = "claude-opus-4-6"
-    graph_accounts_to_scan: int = 20
-    x_top_story_max_ratio: float = 0.20
+    timezone: str
+    output_html: str
+    db_path: str
+    max_items_per_source: int
+    max_fulltext_fetches_per_run: int
+    max_claude_batch_items: int
+    min_hours_between_refetch: int
+    enable_preview_images: bool
+    x_enabled_in_production: bool
+    claude_model: str
+    claude_max_tokens: int
+    distill_model: str
+    distill_max_tokens: int
+    graph_accounts_to_scan: int
+    x_top_story_max_ratio: float
+    x_api_base_url: str
+    x_tweet_base_url: str
+    arxiv_api_base_url: str
+    user_agent: str
+    log_dir: str
+    checker_model: str
+    checker_max_tokens: int
 
 
 class TopicFilters(BaseModel):
@@ -94,22 +102,22 @@ class ImagePolicy(BaseModel):
 
 
 class RenderConfig(BaseModel):
-    sections: list[str] = Field(default_factory=list)
-    item_annotation_word_limit: int = 70
-    keep_days: int = 14
-    max_top_stories: int = 12
-    max_items_in_html: int = 180
-    show_preview_images: bool = True
+    sections: list[str]
+    item_annotation_word_limit: int
+    keep_days: int
+    max_top_stories: int
+    max_items_in_html: int
+    show_preview_images: bool
 
 
 class AppConfig(BaseModel):
     """Full application configuration loaded from sources.yaml."""
 
-    global_config: GlobalConfig = Field(alias="global", default_factory=GlobalConfig)
+    global_config: GlobalConfig = Field(alias="global")
     topic_filters: TopicFilters = Field(default_factory=TopicFilters)
     image_policy: ImagePolicy = Field(default_factory=ImagePolicy)
     sources: list[SourceConfig] = Field(default_factory=list)
-    render: RenderConfig = Field(default_factory=RenderConfig)
+    render: RenderConfig
 
     model_config = {"populate_by_name": True}
 

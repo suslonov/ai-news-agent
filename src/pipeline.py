@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Optional
 
 from src import db, dedupe, images, render
-from src.collectors import medium_browser, medium_rss, rss_generic, rsshub_generic, x_api
+from src.collectors import arxiv, medium_browser, medium_rss, rss_generic, rsshub_generic, x_api
 from src.models import AppConfig, NormalizedItem, RunStats
 from src.claude.summarize import annotate_batch, apply_annotations
 from src.claude.distill import distill_criteria
@@ -39,39 +39,50 @@ def _collect_all_sources(
         error_msg: Optional[str] = None
 
         try:
+            gc = config.global_config
+
             if source.type.value == "rss":
                 items = rss_generic.collect(
                     source=source,
                     filters=config.topic_filters,
-                    max_items=config.global_config.max_items_per_source,
+                    user_agent=gc.user_agent,
+                    max_items=gc.max_items_per_source,
                 )
 
             elif source.type.value == "medium_rss":
                 items = medium_rss.collect(
                     source=source,
                     filters=config.topic_filters,
-                    max_items=config.global_config.max_items_per_source,
+                    user_agent=gc.user_agent,
+                    max_items=gc.max_items_per_source,
                 )
 
             elif source.type.value == "rsshub_generic":
                 items = rsshub_generic.collect(
                     source=source,
                     filters=config.topic_filters,
-                    max_items=config.global_config.max_items_per_source,
+                    user_agent=gc.user_agent,
+                    max_items=gc.max_items_per_source,
                 )
 
             elif source.type.value == "arxiv":
-                logger.warning("Arxiv collector not yet implemented, skipping %s.", source.id)
+                items = arxiv.collect(
+                    source=source,
+                    filters=config.topic_filters,
+                    api_base=gc.arxiv_api_base_url,
+                    user_agent=gc.user_agent,
+                    max_items=gc.max_items_per_source,
+                )
 
             elif source.type.value in ("x_api_accounts", "x_api_search"):
-                if not config.global_config.x_enabled_in_production:
+                if not gc.x_enabled_in_production:
                     logger.debug("X collector disabled in production, skipping %s", source.id)
                     continue
 
-                items = x_api.collect(source=source, filters=config.topic_filters)
+                items = x_api.collect(source=source, filters=config.topic_filters, global_config=gc)
 
             elif source.type.value == "x_graph_scanner":
-                if not config.global_config.x_enabled_in_production:
+                if not gc.x_enabled_in_production:
                     logger.debug("X graph scanner disabled (ENABLE_X_PRODUCTION=false), skipping %s", source.id)
                     continue
 
@@ -79,8 +90,9 @@ def _collect_all_sources(
                     source=source,
                     filters=config.topic_filters,
                     db_path=db_path,
-                    max_accounts=config.global_config.graph_accounts_to_scan,
-                    max_items=config.global_config.max_items_per_source,
+                    global_config=gc,
+                    max_accounts=gc.graph_accounts_to_scan,
+                    max_items=gc.max_items_per_source,
                 )
 
             elif source.type.value == "x_unofficial":
@@ -156,6 +168,7 @@ def run_pipeline(
         new_items, image_count = images.enrich_items_with_images(
             new_items,
             policy=config.image_policy,
+            user_agent=config.global_config.user_agent,
             max_fetches=config.global_config.max_fulltext_fetches_per_run,
         )
         stats = stats.model_copy(update={"image_resolved_count": image_count})
@@ -221,6 +234,7 @@ def _distill_criteria_from_signals(config: AppConfig, db_path: Path) -> None:
         api_key=api_key,
         db_path=db_path,
         model=config.global_config.distill_model,
+        max_tokens=config.global_config.distill_max_tokens,
     )
 
 

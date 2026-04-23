@@ -23,7 +23,6 @@ from src.models import ImageSourceType, ItemStatus, NormalizedItem, SourceConfig
 logger = logging.getLogger(__name__)
 
 _DEFAULT_TIMEOUT = 15
-_USER_AGENT = "ai-news-agent/1.0 (https://github.com/user/ai-news-agent)"
 
 
 def _parse_dt(value: Optional[str | tuple]) -> Optional[datetime]:
@@ -104,14 +103,41 @@ def _compute_hash(title: str, url: str) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
+def _kw_pattern(keyword: str) -> re.Pattern:
+    """Return a word-boundary regex pattern for *keyword*.
+
+    Multi-word phrases (e.g. "language model") match as whole phrases.
+    Single tokens shorter than 4 characters (e.g. "ai", "llm") require a
+    word boundary so they cannot match mid-word (e.g. "ai" must not match
+    "paint" or "available").
+    """
+    escaped = re.escape(keyword.lower())
+    return re.compile(r"\b" + escaped + r"\b")
+
+
+# Cache compiled patterns for the lifetime of the process.
+_PATTERN_CACHE: dict[str, re.Pattern] = {}
+
+
+def _get_pattern(keyword: str) -> re.Pattern:
+    kl = keyword.lower()
+    if kl not in _PATTERN_CACHE:
+        _PATTERN_CACHE[kl] = _kw_pattern(kl)
+    return _PATTERN_CACHE[kl]
+
+
 def _passes_topic_filter(entry_text: str, filters: TopicFilters) -> bool:
-    """Return True if the text matches include keywords and no exclude keywords."""
+    """Return True if the text matches include keywords and no exclude keywords.
+
+    Uses word-boundary matching so short tokens like 'ai' and 'llm' do not
+    fire on unrelated words containing those letters.
+    """
     lowered = entry_text.lower()
     if filters.include_keywords:
-        if not any(kw.lower() in lowered for kw in filters.include_keywords):
+        if not any(_get_pattern(kw).search(lowered) for kw in filters.include_keywords):
             return False
     if filters.exclude_keywords:
-        if any(kw.lower() in lowered for kw in filters.exclude_keywords):
+        if any(_get_pattern(kw).search(lowered) for kw in filters.exclude_keywords):
             return False
     return True
 
@@ -122,20 +148,21 @@ def _passes_topic_filter(entry_text: str, filters: TopicFilters) -> bool:
     wait=wait_exponential(multiplier=1, min=1, max=8),
     reraise=True,
 )
-def _http_get_feed(url: str, timeout: int) -> str:
+def _http_get_feed(url: str, timeout: int, user_agent: str) -> str:
     """HTTP GET a feed URL with automatic retries on transport errors."""
-    response = httpx.get(url, timeout=timeout, headers={"User-Agent": _USER_AGENT}, follow_redirects=True)
+    response = httpx.get(url, timeout=timeout, headers={"User-Agent": user_agent}, follow_redirects=True)
     response.raise_for_status()
     return response.text
 
 
 def fetch_feed(
     url: str,
+    user_agent: str,
     timeout: int = _DEFAULT_TIMEOUT,
 ) -> feedparser.FeedParserDict:
     """Fetch and parse a single RSS/Atom feed URL."""
     try:
-        text = _http_get_feed(url, timeout)
+        text = _http_get_feed(url, timeout, user_agent)
         return feedparser.parse(text)
     except httpx.HTTPStatusError as exc:
         logger.warning("HTTP error fetching feed %s: %s", url, exc)
@@ -195,6 +222,7 @@ def normalize_entry(
 def collect(
     source: SourceConfig,
     filters: TopicFilters,
+    user_agent: str,
     max_items: int = 20,
 ) -> list[NormalizedItem]:
     """Collect and normalize items from all feed URLs of a source.
@@ -205,7 +233,7 @@ def collect(
 
     for feed_url in source.feed_urls:
         logger.info("Fetching RSS feed: %s", feed_url)
-        parsed = fetch_feed(feed_url)
+        parsed = fetch_feed(feed_url, user_agent)
 
         if parsed.bozo and not parsed.entries:
             logger.warning("Feed parse error for %s: %s", feed_url, parsed.get("bozo_exception"))

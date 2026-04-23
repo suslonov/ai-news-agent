@@ -19,8 +19,8 @@ def distill_criteria(
     items_with_signals: list[dict],
     api_key: str,
     db_path: Path,
-    model: str = "claude-haiku-3-5",
-    max_tokens: int = 1024,
+    model: str,
+    max_tokens: int,
 ) -> bool:
     """Run criteria distillation and persist the result.
 
@@ -73,6 +73,15 @@ def distill_criteria(
     except Exception as exc:
         logger.error("Criteria distillation API call failed: %s", exc)
         return False
+
+    usage = getattr(message, "usage", None)
+    logger.info(
+        "Claude usage — model: %s  in: %s  out: %s  stop: %s",
+        model,
+        getattr(usage, "input_tokens", "?"),
+        getattr(usage, "output_tokens", "?"),
+        getattr(message, "stop_reason", "?"),
+    )
 
     if not new_criteria:
         logger.warning("Distillation returned empty criteria — keeping existing.")

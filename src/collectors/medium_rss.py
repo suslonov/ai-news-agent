@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 def collect(
     source: SourceConfig,
     filters: TopicFilters,
+    user_agent: str,
     max_items: int = 20,
 ) -> list[NormalizedItem]:
     """Collect and normalize entries from Medium RSS feeds.
@@ -29,7 +30,7 @@ def collect(
         logger.info("Medium source %s has no feed_urls configured, skipping.", source.id)
         return []
 
-    items = rss_collect(source=source, filters=filters, max_items=max_items)
+    items = rss_collect(source=source, filters=filters, user_agent=user_agent, max_items=max_items)
 
     if source.enrich_with_browser_if_selected:
         enriched = []

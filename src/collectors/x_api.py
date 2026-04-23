@@ -9,118 +9,32 @@ This module is kept in the codebase but disabled by default.
 
 from __future__ import annotations
 
-import hashlib
 import logging
-import os
-from datetime import datetime, timezone
-from typing import Optional
 
 import httpx
 
-from src.models import ImageSourceType, ItemStatus, NormalizedItem, SourceConfig, TopicFilters
+from src.collectors.x_common import (
+    DEFAULT_TIMEOUT,
+    fetch_user_tweets,
+    get_bearer_token,
+    normalize_tweet,
+)
+from src.models import GlobalConfig, NormalizedItem, SourceConfig, TopicFilters
 
 logger = logging.getLogger(__name__)
 
-_X_API_BASE = "https://api.twitter.com/2"
-_DEFAULT_TIMEOUT = 15
 
-
-def _is_production_enabled() -> bool:
-    return os.environ.get("ENABLE_X_PRODUCTION", "false").lower() in ("true", "1", "yes")
-
-
-def _get_bearer_token() -> Optional[str]:
-    token = os.environ.get("X_BEARER_TOKEN", "").strip()
-    return token or None
-
-
-def _build_tweet_url(username: str, tweet_id: str) -> str:
-    return f"https://twitter.com/{username}/status/{tweet_id}"
-
-
-def _compute_hash(tweet_id: str) -> str:
-    return hashlib.sha256(f"x_tweet_{tweet_id}".encode()).hexdigest()[:16]
-
-
-def _normalize_tweet(tweet: dict, source: SourceConfig) -> Optional[NormalizedItem]:
-    """Normalize a single Twitter API v2 tweet object into a NormalizedItem."""
-    tweet_id = tweet.get("id", "")
-    text = tweet.get("text", "").strip()
-    author_id = tweet.get("author_id", "")
-    created_at = tweet.get("created_at")
-
-    # Resolve author username from includes if available
-    username = tweet.get("_username", author_id)
-    url = _build_tweet_url(username, tweet_id)
-
-    if not tweet_id or not text:
-        return None
-
-    # Use first 120 chars of tweet text as title
-    title = text[:120] + ("…" if len(text) > 120 else "")
-
-    published_at: Optional[datetime] = None
-    if created_at:
-        try:
-            published_at = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
-        except Exception:
-            pass
-
-    return NormalizedItem(
-        source_id=source.id,
-        source_type=source.type.value,
-        title=title,
-        url=url,
-        canonical_url=url,
-        author=f"@{username}" if username else None,
-        published_at=published_at,
-        content_snippet=text[:500],
-        hash=_compute_hash(tweet_id),
-        tags=list(source.tags),
-        status=ItemStatus.candidate,
-    )
-
-
-def _fetch_user_timeline(username: str, bearer_token: str, max_results: int = 10) -> list[dict]:
-    """Fetch recent tweets for a given username using the v2 API."""
-    headers = {"Authorization": f"Bearer {bearer_token}"}
-    try:
-        # First resolve user id
-        resp = httpx.get(
-            f"{_X_API_BASE}/users/by/username/{username}",
-            headers=headers,
-            timeout=_DEFAULT_TIMEOUT,
-        )
-        resp.raise_for_status()
-        user_id = resp.json()["data"]["id"]
-
-        # Fetch timeline
-        resp = httpx.get(
-            f"{_X_API_BASE}/users/{user_id}/tweets",
-            headers=headers,
-            params={
-                "max_results": max_results,
-                "tweet.fields": "created_at,author_id,text",
-                "expansions": "author_id",
-            },
-            timeout=_DEFAULT_TIMEOUT,
-        )
-        resp.raise_for_status()
-        tweets = resp.json().get("data", [])
-        for t in tweets:
-            t["_username"] = username
-        return tweets
-    except Exception as exc:
-        logger.warning("Failed to fetch timeline for @%s: %s", username, exc)
-        return []
-
-
-def _fetch_search(query: str, bearer_token: str, max_results: int = 10) -> list[dict]:
+def _fetch_search(
+    query: str,
+    bearer_token: str,
+    api_base: str,
+    max_results: int = 10,
+) -> list[dict]:
     """Search recent tweets using the v2 search endpoint."""
     headers = {"Authorization": f"Bearer {bearer_token}"}
     try:
         resp = httpx.get(
-            f"{_X_API_BASE}/tweets/search/recent",
+            f"{api_base}/tweets/search/recent",
             headers=headers,
             params={
                 "query": query,
@@ -128,7 +42,7 @@ def _fetch_search(query: str, bearer_token: str, max_results: int = 10) -> list[
                 "tweet.fields": "created_at,author_id,text",
                 "expansions": "author_id",
             },
-            timeout=_DEFAULT_TIMEOUT,
+            timeout=DEFAULT_TIMEOUT,
         )
         resp.raise_for_status()
         data = resp.json()
@@ -145,6 +59,7 @@ def _fetch_search(query: str, bearer_token: str, max_results: int = 10) -> list[
 def collect(
     source: SourceConfig,
     filters: TopicFilters,
+    global_config: GlobalConfig,
     max_items: int = 20,
 ) -> list[NormalizedItem]:
     """Collect tweets from X API based on source type.
@@ -152,24 +67,35 @@ def collect(
     Returns an empty list if bearer token is missing.
     Production gating is enforced by the pipeline before this function is called.
     """
-    bearer_token = _get_bearer_token()
+    bearer_token = get_bearer_token()
     if not bearer_token:
         logger.warning("X_BEARER_TOKEN not set. Skipping source %s.", source.id)
         return []
 
+    api_base = global_config.x_api_base_url
+    tweet_base_url = global_config.x_tweet_base_url
     raw_tweets: list[dict] = []
 
     if source.type.value == "x_api_accounts":
         for username in source.usernames:
-            raw_tweets.extend(_fetch_user_timeline(username, bearer_token, max_results=5))
+            raw_tweets.extend(
+                fetch_user_tweets(username, bearer_token, api_base, max_results=5)
+            )
 
     elif source.type.value == "x_api_search":
+        # Twitter v2 recent search requires max_results in [10, 100].
+        # Use source.max_results if set, otherwise derive from max_items,
+        # always clamping to the API minimum of 10.
+        per_query = source.max_results or max(1, max_items // max(len(source.queries), 1))
+        per_query = max(10, per_query)
         for query in source.queries:
-            raw_tweets.extend(_fetch_search(query, bearer_token, max_results=max_items // max(len(source.queries), 1)))
+            raw_tweets.extend(
+                _fetch_search(query, bearer_token, api_base, max_results=per_query)
+            )
 
     results: list[NormalizedItem] = []
     for tweet in raw_tweets:
-        item = _normalize_tweet(tweet, source)
+        item = normalize_tweet(tweet, source, tweet_base_url)
         if item:
             results.append(item)
         if len(results) >= max_items:
