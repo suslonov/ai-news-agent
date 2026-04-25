@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime, timezone
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -80,6 +81,8 @@ def _collect_all_sources(
                     continue
 
                 items = x_api.collect(source=source, filters=config.topic_filters, global_config=gc)
+                time.sleep(10)
+
 
             elif source.type.value == "x_graph_scanner":
                 if not gc.x_enabled_in_production:
@@ -110,6 +113,7 @@ def _collect_all_sources(
             errors.append((source.id, error_msg))
 
         all_items.extend(items)
+        
         db.log_source_fetch(db_path, run_id, source.id, len(items), error_msg)
 
     return all_items, errors

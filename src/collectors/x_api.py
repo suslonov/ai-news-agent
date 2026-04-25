@@ -10,6 +10,7 @@ This module is kept in the codebase but disabled by default.
 from __future__ import annotations
 
 import logging
+import time
 
 import httpx
 
@@ -92,6 +93,7 @@ def collect(
             raw_tweets.extend(
                 _fetch_search(query, bearer_token, api_base, max_results=per_query)
             )
+            time.sleep(2)
 
     results: list[NormalizedItem] = []
     for tweet in raw_tweets:

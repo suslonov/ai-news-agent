@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+import time
 
 from src import db
 from src.collectors.x_common import fetch_user_tweets, get_bearer_token, normalize_tweet
@@ -66,6 +67,7 @@ def collect(
                 break
         if len(results) >= max_items:
             break
+        time.sleep(2)
 
     logger.info("X graph scanner: collected %d items from %d accounts", len(results), len(handles))
     return results

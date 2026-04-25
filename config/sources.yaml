@@ -7,8 +7,8 @@ global:
   max_claude_batch_items: 40
   min_hours_between_refetch: 8
   enable_preview_images: true
-  x_enabled_in_production: true
-  claude_model: "claude-sonnet-4-6"
+  x_enabled_in_production: true  # Bearer token from env; needs app access for user lookup + recent search where used
+  claude_model: "claude-sonnet-4-6"  # verify via GET /v1/models if behavior seems off; API returns 200 OK so string is accepted
   claude_max_tokens: 8192
   distill_model: "claude-sonnet-4-6"
   distill_max_tokens: 1024
@@ -19,7 +19,7 @@ global:
   arxiv_api_base_url: "https://export.arxiv.org/api"
   user_agent: "ai-news-agent/1.0 (https://github.com/user/ai-news-agent)"
   log_dir: "~/logs"
-  checker_model: "claude-sonnet-4-6"
+  checker_model: "claude-sonnet-4-6"  # same as claude_model above
   checker_max_tokens: 4096
 
 topic_filters:
@@ -67,6 +67,7 @@ sources:
 
   - id: anthropic_news
     # Disabled: Anthropic does not publish an RSS feed (all known paths return 404).
+    # Last checked: 2026-04-25. Re-check monthly.
     # Monitor https://www.anthropic.com/news for a feed link; re-enable when available.
     enabled: false
     type: rss
@@ -112,7 +113,7 @@ sources:
       - "cat:cs.AI"
       - "cat:cs.CL"
       - "cat:cs.LG"
-    max_results: 15
+    max_results: 7  # 3 queries × 7 ≈ 20 after cross-category dedup, matches global max_items_per_source cap; was 15 (45 fetched, 25 silently dropped)
     tags: ["research"]
 
   - id: medium_ai_topic
@@ -133,7 +134,7 @@ sources:
     category: secondary
     name: "Towards Data Science"
     feed_urls:
-      - "https://medium.com/feed/towards-data-science"
+      - "https://towardsdatascience.com/feed"  # canonical; medium.com/feed/towards-data-science returned only 1 item (likely redirected/throttled)
     tags: ["tds", "medium", "secondary"]
     enrich_with_browser_if_selected: true
 
@@ -160,7 +161,7 @@ sources:
     name: "Inoreader free validation set"
     tags: ["inoreader", "optional"]
 
-  # X/Twitter is enabled (x_enabled_in_production: true). Bearer token required.
+  # X/Twitter — requires X_BEARER_TOKEN (e.g. from .env). When x_enabled_in_production is true, enabled sources run.
   # Static account watcher — accounts listed in usernames below
   - id: x_watch_accounts
     enabled: false
