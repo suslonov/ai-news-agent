@@ -138,6 +138,25 @@ sources:
     tags: ["tds", "medium", "secondary"]
     enrich_with_browser_if_selected: true
 
+  # Graph-powered scanner — reads top accounts from the twitter_accounts DB table.
+  # Only COLLECTS tweets from existing accounts; graph expansion (seeding,
+  # scoring, pruning) runs separately via scripts/build_x_graph.sh.
+  # Requires X_BEARER_TOKEN to be set.
+  - id: x_graph_scanner
+    enabled: true
+    type: x_graph_scanner
+    category: optional_social
+    name: "X Graph Scanner"
+    max_results: 50
+    tags: ["x", "social", "graph"]
+
+  - id: x_unofficial_fallback
+    enabled: false
+    type: x_unofficial
+    category: experimental
+    name: "X unofficial discovery fallback"
+    tags: ["x", "experimental"]
+
   # Free integrator layer: useful, optional
   - id: rsshub_custom_sources
     enabled: false
@@ -183,25 +202,6 @@ sources:
       - "\"AI agent\" OR \"tool use\" OR \"benchmark\""
       - "\"inference\" OR \"serving\" OR \"vLLM\" OR \"llama.cpp\""
     tags: ["x", "social", "optional"]
-
-  # Graph-powered scanner — reads top accounts from the twitter_accounts DB table.
-  # Only COLLECTS tweets from existing accounts; graph expansion (seeding,
-  # scoring, pruning) runs separately via scripts/build_x_graph.sh.
-  # Requires X_BEARER_TOKEN to be set.
-  - id: x_graph_scanner
-    enabled: true
-    type: x_graph_scanner
-    category: optional_social
-    name: "X Graph Scanner"
-    max_results: 50
-    tags: ["x", "social", "graph"]
-
-  - id: x_unofficial_fallback
-    enabled: false
-    type: x_unofficial
-    category: experimental
-    name: "X unofficial discovery fallback"
-    tags: ["x", "experimental"]
 
 render:
   sections:

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import sys
 from pathlib import Path
 
@@ -21,6 +22,30 @@ logger = logging.getLogger(__name__)
 
 # (status, content_type, body_bytes)
 Response = tuple[int, str, bytes]
+
+# `templates/index.jinja2` indents with spaces; a plain `const API_BASE = ...` substring
+# would never match and left interactive buttons broken when mounted under a path prefix.
+_API_BASE_ASSIGN = re.compile(
+    rb'^(\s*)const API_BASE = "[^"]*";',
+    re.MULTILINE,
+)
+
+
+def _patch_served_html_api_base(content: bytes, prefix: str) -> bytes:
+    """Inject `prefix` into the rendered script so fetch() targets this module's mount path."""
+    assign = f'const API_BASE = "{prefix}";'.encode()
+
+    def repl(m: re.Match[bytes]) -> bytes:
+        return m.group(1) + assign
+
+    patched, count = _API_BASE_ASSIGN.subn(repl, content, count=1)
+    if count != 1:
+        logger.warning(
+            "Could not patch API_BASE in rendered HTML (matches=%s); "
+            "check that index.jinja2 still defines const API_BASE",
+            count,
+        )
+    return patched
 
 
 class NewsModule:
@@ -70,10 +95,7 @@ class NewsModule:
             content = self.output_path.read_bytes()
             # Patch API_BASE so the JS targets the correct hub-mounted prefix,
             # regardless of what api_base was used when the file was last rendered.
-            content = content.replace(
-                b'const API_BASE = "";',
-                f'const API_BASE = "{self.prefix}";'.encode(),
-            )
+            content = _patch_served_html_api_base(content, self.prefix)
             return 200, "text/html; charset=utf-8", content
         except FileNotFoundError:
             return 404, "text/plain", b"No rendered HTML found. Run the pipeline first."

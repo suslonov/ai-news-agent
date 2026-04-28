@@ -168,9 +168,20 @@
       object-fit: cover;
       display: block;
       background: var(--border);
+      flex-shrink: 0;
     }
 
-    .card-body { padding: 1rem; flex: 1; display: flex; flex-direction: column; gap: 0.5rem; }
+    .card-body {
+      padding: 1rem;
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      overflow-y: auto;
+      overflow-x: hidden;
+      -webkit-overflow-scrolling: touch;
+    }
 
     .card-meta {
       display: flex;
@@ -202,6 +213,13 @@
     .card-title a { color: var(--text); text-decoration: none; }
     .card-title a:hover { color: var(--accent); }
 
+    .card-byline {
+      font-size: 0.76rem;
+      font-weight: 600;
+      margin: 0.2rem 0 0.35rem;
+      line-height: 1.35;
+    }
+
     .card-annotation { font-size: 0.82rem; color: var(--muted); line-height: 1.55; }
     .card-why { font-size: 0.78rem; color: var(--green); font-style: italic; }
 
@@ -229,6 +247,7 @@
       justify-content: space-between;
       gap: 0.5rem;
       background: #fafbfe;
+      flex-shrink: 0;
     }
     .card-link {
       font-size: 0.75rem;
@@ -362,6 +381,11 @@
       <a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.title }}</a>
     </h3>
 
+    {% set byline = (item.author or '') | trim %}
+    {% if byline %}
+    <p class="card-byline">{{ byline }}</p>
+    {% endif %}
+
     {% set display_text = item.annotation or item.content_snippet %}
     {% if display_text %}
     <p class="card-annotation">{{ display_text | truncate(280) }}</p>
@@ -385,9 +409,9 @@
     <a class="card-link" href="{{ item.url }}" target="_blank" rel="noopener noreferrer">Open →</a>
     <div class="card-actions">
       {# Save button #}
-      <button class="btn-action btn-save{% if item.is_saved %} saved{% endif %}"
+      <button type="button" class="btn-action btn-save{% if item.is_saved %} saved{% endif %}"
               title="{% if item.is_saved %}Unsave{% else %}Save{% endif %}"
-              data-id="{{ item.id }}" data-saved="{{ item.is_saved or 0 }}">
+              data-id="{{ item.id }}" data-saved="{{ 1 if item.is_saved else 0 }}">
         <svg width="13" height="13" viewBox="0 0 20 20" fill="{% if item.is_saved %}currentColor{% else %}none{% endif %}" stroke="currentColor" stroke-width="2">
           <path d="M5 3h10a1 1 0 0 1 1 1v13l-6-4-6 4V4a1 1 0 0 1 1-1z"/>
         </svg>
@@ -662,21 +686,56 @@
   });
 
   /* ── Save button ────────────────────────────────────────────────── */
+  function applySaveVisuals(id, saved) {
+    document.querySelectorAll(`.btn-save[data-id="${id}"]`).forEach((b) => {
+      b.classList.toggle("saved", saved);
+      b.setAttribute("data-saved", saved ? "1" : "0");
+      b.title = saved ? "Unsave" : "Save";
+      const svg = b.querySelector("svg");
+      if (svg) svg.setAttribute("fill", saved ? "currentColor" : "none");
+    });
+    document.querySelectorAll(`.card[data-id="${id}"]`).forEach((card) => {
+      card.setAttribute("data-saved", saved ? "1" : "0");
+    });
+  }
+
   document.addEventListener("click", async (e) => {
     const btn = e.target.closest(".btn-save");
-    if (!btn) return;
+    if (!btn || btn.disabled) return;
     e.preventDefault();
     const id = parseInt(btn.dataset.id, 10);
-    const isSaved = btn.dataset.saved === "1";
+    if (!Number.isFinite(id)) {
+      console.warn("Save: missing or invalid item id");
+      return;
+    }
+    const rawSaved = (btn.getAttribute("data-saved") || "").trim().toLowerCase();
+    const wasSaved = rawSaved === "1" || rawSaved === "true";
+    const nextSaved = !wasSaved;
+    applySaveVisuals(id, nextSaved);
+    btn.disabled = true;
     try {
       const resp = await fetch(API_BASE + "/api/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, is_saved: !isSaved }),
+        body: JSON.stringify({ id, is_saved: nextSaved }),
       });
-      if (resp.ok) window.location.reload();
+      if (!resp.ok) {
+        applySaveVisuals(id, wasSaved);
+        console.warn("Save failed:", resp.status, await resp.text());
+        return;
+      }
+      if (!nextSaved && btn.closest("#view-saved")) {
+        document.querySelectorAll(`#view-saved .card[data-id="${id}"]`).forEach((card) => {
+          card.style.transition = "opacity 0.25s ease";
+          card.style.opacity = "0";
+          setTimeout(() => card.remove(), 260);
+        });
+      }
     } catch (_) {
+      applySaveVisuals(id, wasSaved);
       console.warn("Save failed — is the local server running?");
+    } finally {
+      document.querySelectorAll(`.btn-save[data-id="${id}"]`).forEach((b) => { b.disabled = false; });
     }
   });
 
