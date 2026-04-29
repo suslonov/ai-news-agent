@@ -107,6 +107,10 @@ class NewsModule:
 
             config = load_config(self.sources_yaml)
             items = database.get_recent_items(self.db_path, limit=config.render.max_items_in_html)
+            saved_items = database.get_saved_items(self.db_path)
+            if saved_items:
+                seen_ids = {item["id"] for item in items}
+                items.extend(item for item in saved_items if item["id"] not in seen_ids)
             count = render.render_html(
                 items=items,
                 config=config.render,

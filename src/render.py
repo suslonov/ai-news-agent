@@ -113,6 +113,7 @@ def render_html(
     env = _build_env(tdir)
     template = env.get_template("index.jinja2")
 
+    saved_items = [i for i in items if i.get("is_saved")]
     kept_items = [i for i in items if i.get("status") in ("kept", "candidate") and not i.get("is_read")]
     kept_items = kept_items[: config.max_items_in_html]
 
@@ -126,8 +127,6 @@ def render_html(
     new_since_last = _new_since_last_run(kept_items, last_run_at) if "new_since_last_run" in config.sections else []
 
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-
-    saved_items = [i for i in kept_items if i.get("is_saved")]
 
     ctx: dict[str, Any] = {
         "api_base": api_base,

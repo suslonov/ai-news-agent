@@ -197,6 +197,10 @@ def run_pipeline(
 
     # ── 9. Render HTML ─────────────────────────────────────────────────────────
     items_for_render = db.get_recent_items(db_path, limit=config.render.max_items_in_html)
+    saved_items_for_render = db.get_saved_items(db_path)
+    if saved_items_for_render:
+        seen_ids = {item["id"] for item in items_for_render}
+        items_for_render.extend(item for item in saved_items_for_render if item["id"] not in seen_ids)
     rendered_count = render.render_html(
         items=items_for_render,
         config=config.render,

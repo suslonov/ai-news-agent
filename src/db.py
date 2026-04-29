@@ -225,6 +225,15 @@ def get_recent_items(db_path: Path, limit: int = 100, status: Optional[str] = No
         return [dict(r) for r in rows]
 
 
+def get_saved_items(db_path: Path) -> list[dict]:
+    """Return all saved items ordered by most recent first."""
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            "SELECT * FROM items WHERE is_saved = 1 ORDER BY published_at DESC, fetched_at DESC",
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
 def mark_run_start(db_path: Path) -> int:
     """Insert a new run record and return its id."""
     now = datetime.utcnow().isoformat()
