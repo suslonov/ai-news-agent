@@ -12,7 +12,7 @@ Each object must have exactly these fields:
 - "tags": array of strings — 2-6 relevant lowercase tags
 - "annotation": string — 35-70 words summarizing the item clearly and factually
 - "why_it_matters": string — 1 sentence explaining the significance
-- "priority_score": integer — 0-100; 80+ means breaking/landmark news; 50-79 is notable; below 50 is minor
+- "priority_score": integer — 0-100 intrinsic news prominence: 80+ breaking/landmark; 50-79 notable; below 50 minor. Do not inflate scores for hypothetical read-later/bookmark use — prominence is orthogonal to saving.
 
 Items to review:
 {{ items_json }}

@@ -117,7 +117,9 @@ def render_html(
     kept_items = [i for i in items if i.get("status") in ("kept", "candidate") and not i.get("is_read")]
     kept_items = kept_items[: config.max_items_in_html]
 
-    top_stories = _pick_top_stories(kept_items, config.max_top_stories) if "top_stories" in config.sections else []
+    # Top Stories are editorial prominence only; bookmarks (is_saved) are shown under Saved only.
+    top_pool = [i for i in kept_items if not i.get("is_saved")]
+    top_stories = _pick_top_stories(top_pool, config.max_top_stories) if "top_stories" in config.sections else []
     top_ids = {i["id"] for i in top_stories}
 
     latest = [i for i in kept_items if i.get("id") not in top_ids]

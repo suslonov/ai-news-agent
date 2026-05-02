@@ -19,6 +19,7 @@ def _make_item(
     status: str = "kept",
     priority_score: int = 50,
     is_top_story: int = 0,
+    is_saved: int = 0,
     preview_image_url: str | None = None,
     annotation: str | None = None,
     topic: str | None = None,
@@ -33,6 +34,7 @@ def _make_item(
         "status": status,
         "priority_score": priority_score,
         "is_top_story": is_top_story,
+        "is_saved": is_saved,
         "preview_image_url": preview_image_url,
         "annotation": annotation,
         "topic": topic,
@@ -81,6 +83,32 @@ def test_render_html_contains_top_story_section(tmp_path: Path):
     render_html(items, _make_config(), output)
     html = output.read_text()
     assert "Top Stories" in html
+
+
+def test_saved_items_excluded_from_top_stories_ranking(tmp_path: Path):
+    """Saved/read-later bookmarks must not occupy Top Stories slots (Saved tab holds them)."""
+    items = [
+        _make_item(
+            id=1,
+            title="Saved Headline Flagged Top",
+            is_top_story=1,
+            priority_score=99,
+            is_saved=1,
+        ),
+        _make_item(id=2, title="Eligible Top Fallback", priority_score=85, is_saved=0),
+    ]
+    output = tmp_path / "index.html"
+    render_html(items, _make_config(), output)
+    html = output.read_text()
+    marker = '<section class="section" data-section="top_stories">'
+    end_top = "</section>"
+    idx = html.find(marker)
+    assert idx >= 0
+    after = html.find(end_top, idx + len(marker))
+    assert after > idx
+    top_block = html[idx:after]
+    assert "Eligible Top Fallback" in top_block
+    assert "Saved Headline Flagged Top" not in top_block
 
 
 def test_render_html_contains_by_source_section(tmp_path: Path):
