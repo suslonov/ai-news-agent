@@ -39,6 +39,12 @@ topic_filters:
     - eval
     - RLHF
     - tool use
+    # Russian (Habr and other RU feeds)
+    - нейросеть
+    - нейросети
+    - машинное обучение
+    - искусственный интеллект
+    - языковая модель
   exclude_keywords:
     - celebrity
     - generic gadget rumor
@@ -137,6 +143,17 @@ sources:
       - "https://towardsdatascience.com/feed"  # canonical; medium.com/feed/towards-data-science returned only 1 item (likely redirected/throttled)
     tags: ["tds", "medium", "secondary"]
     enrich_with_browser_if_selected: true
+
+  # Habr: Russian-language hub RSS (?fl=ru). Collected via standard rss collector.
+  - id: habr_ru_ml_ai
+    enabled: true
+    type: rss
+    category: secondary
+    name: "Хабр — ML и ИИ"
+    feed_urls:
+      - "https://habr.com/ru/rss/hubs/machine_learning/articles/?fl=ru"
+      - "https://habr.com/ru/rss/hubs/artificial_intelligence/articles/?fl=ru"
+    tags: ["habr", "russian", "secondary"]
 
   # Graph-powered scanner — reads top accounts from the twitter_accounts DB table.
   # Only COLLECTS tweets from existing accounts; graph expansion (seeding,
