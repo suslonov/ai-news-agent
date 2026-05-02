@@ -657,6 +657,16 @@
     document.getElementById("tab-recent").classList.toggle("active", tab === "recent");
     document.getElementById("tab-saved").classList.toggle("active",  tab === "saved");
     sessionStorage.setItem("ai-news-tab", tab);
+    const search = document.getElementById("search-input");
+    if (search) {
+      const onSaved = tab === "saved";
+      search.disabled = onSaved;
+      search.placeholder = onSaved ? "Search disabled on Saved" : "Filter articles…";
+      if (onSaved) {
+        search.value = "";
+        filterCards("");
+      }
+    }
   };
 
   // Restore last active tab
@@ -748,6 +758,17 @@
   });
 
   /* ── Read button ────────────────────────────────────────────────── */
+  function applyReadVisuals(id, read) {
+    document.querySelectorAll(`.btn-read[data-id="${id}"]`).forEach((b) => {
+      b.classList.toggle("read", read);
+      b.dataset.read = read ? "1" : "0";
+      b.title = read ? "Mark unread" : "Mark read";
+    });
+    document.querySelectorAll(`.card[data-id="${id}"]`).forEach((card) => {
+      card.dataset.read = read ? "1" : "0";
+    });
+  }
+
   document.addEventListener("click", async (e) => {
     const btn = e.target.closest(".btn-read");
     if (!btn) return;
@@ -761,13 +782,14 @@
         body: JSON.stringify({ id, is_read: !isRead }),
       });
       if (!resp.ok) return;
-      // Hide all instances of this card immediately; they won't appear after next render.
+      applyReadVisuals(id, !isRead);
+      // Fade out unread→read copies outside Saved only; Saved tab stays intact.
       document.querySelectorAll(`.card[data-id="${id}"]`).forEach(card => {
-        if (!isRead) {
-          card.style.transition = "opacity 0.3s";
-          card.style.opacity = "0";
-          setTimeout(() => card.closest("li, .card") && card.remove() || card.remove(), 320);
-        }
+        if (isRead) return;
+        if (card.closest("#view-saved")) return;
+        card.style.transition = "opacity 0.3s";
+        card.style.opacity = "0";
+        setTimeout(() => card.remove(), 320);
       });
     } catch (_) {
       console.warn("Mark-read failed — is the local server running?");
@@ -848,12 +870,13 @@
   function filterCards(query) {
     const q = query.toLowerCase().trim();
     document.querySelectorAll(".card, .source-list li").forEach(el => {
+      if (el.closest("#view-saved")) return;
       const title  = (el.dataset.title  || el.querySelector("a")?.textContent || "").toLowerCase();
       const source = (el.dataset.source || "").toLowerCase();
       const topic  = (el.dataset.topic  || "").toLowerCase();
       el.style.display = (!q || title.includes(q) || source.includes(q) || topic.includes(q)) ? "" : "none";
     });
-    document.querySelectorAll(".section").forEach(section => {
+    document.querySelectorAll("#view-recent .section").forEach(section => {
       const visible = section.querySelectorAll(
         ".card:not([style*='display: none']), .source-list li:not([style*='display: none'])"
       );
