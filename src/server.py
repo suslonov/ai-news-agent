@@ -41,10 +41,14 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         self._dispatch("POST")
 
     def _dispatch(self, method: str) -> None:
-        path = self.path.split("?")[0]
+        raw = self.path.split("?", 1)
+        path = raw[0]
+        query = raw[1] if len(raw) > 1 else ""
         length = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(length) if length else b""
-        status, ctype, body_out = self.__class__.module.handle(method, path, body, dict(self.headers))
+        hdrs = dict(self.headers)
+        hdrs["X-Query-String"] = query
+        status, ctype, body_out = self.__class__.module.handle(method, path, body, hdrs)
         self._send(status, ctype, body_out)
 
     def _send(self, status: int, content_type: str, body: bytes) -> None:

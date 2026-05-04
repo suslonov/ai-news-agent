@@ -13,6 +13,9 @@ from src.models import NormalizedItem, RunStats
 
 logger = logging.getLogger(__name__)
 
+# Page size for archive / “Unfiltered” tab (must match hub API and render).
+UNFILTERED_PAGE_SIZE = 100
+
 _SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS items (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -230,6 +233,27 @@ def get_saved_items(db_path: Path) -> list[dict]:
     with _connect(db_path) as conn:
         rows = conn.execute(
             "SELECT * FROM items WHERE is_saved = 1 ORDER BY published_at DESC, fetched_at DESC",
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def count_all_items(db_path: Path) -> int:
+    """Return total row count in items (all statuses, read/saved flags ignored)."""
+    with _connect(db_path) as conn:
+        row = conn.execute("SELECT COUNT(*) AS n FROM items").fetchone()
+        return int(row["n"])
+
+
+def get_all_items_page(db_path: Path, limit: int, offset: int) -> list[dict]:
+    """Return a page of all items, newest first, regardless of status or read state."""
+    if limit < 1:
+        return []
+    if offset < 0:
+        offset = 0
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            "SELECT * FROM items ORDER BY published_at DESC, fetched_at DESC, id DESC LIMIT ? OFFSET ?",
+            (limit, offset),
         ).fetchall()
         return [dict(r) for r in rows]
 

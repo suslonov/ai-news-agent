@@ -4,10 +4,11 @@ Implements the Module protocol expected by ai-home-hub's loader.
 Can also be used standalone via src.server (prefix="").
 
 The module handles:
-  GET  /          → serve rendered HTML
-  POST /api/re-render   → re-render HTML from current DB state
-  POST /api/mark-read   → mark item read/unread
-  POST /api/save        → save/unsave item
+  GET  /                      → serve rendered HTML
+  GET  /api/unfiltered?page=N → JSON page of all DB rows (100 per page)
+  POST /api/re-render         → re-render HTML from current DB state
+  POST /api/mark-read         → mark item read/unread
+  POST /api/save              → save/unsave item
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ import logging
 import re
 import sys
 from pathlib import Path
+from urllib.parse import parse_qs
 
 logger = logging.getLogger(__name__)
 
@@ -63,19 +65,29 @@ class NewsModule:
         # Load db_path and output_html from sources.yaml so ~/... paths are honoured.
         # Fall back to hub config values only if sources.yaml is missing.
         try:
-            from src.settings import load_config
+            from src.settings import load_config, resolve_repo_path
+
             app_config = load_config(self.sources_yaml)
-            import os
-            self.db_path = Path(os.path.expanduser(app_config.global_config.db_path)).resolve()
-            self.output_path = Path(os.path.expanduser(app_config.global_config.output_html)).resolve()
+            self.db_path = resolve_repo_path(app_config.global_config.db_path, self.repo_path)
+            self.output_path = resolve_repo_path(app_config.global_config.output_html, self.repo_path)
         except Exception:
             self.db_path = (self.repo_path / config.get("db_path", "data/state.db")).resolve()
             self.output_path = (self.repo_path / config.get("output_html", "data/rendered/index.html")).resolve()
 
     def handle(self, method: str, path: str, body: bytes, headers: dict) -> Response:
         """Route an incoming request to the appropriate handler."""
-        if method in ("GET", "HEAD") and path in ("", "/", "/index.html"):
+        hdrs = dict(headers)
+        if "?" in path:
+            path_only, _, qs = path.partition("?")
+            if qs and not str(hdrs.get("X-Query-String", "")).strip():
+                hdrs["X-Query-String"] = qs
+            path = path_only
+
+        route = path.rstrip("/") or "/"
+        if method in ("GET", "HEAD") and route in ("", "/", "/index.html"):
             return self._serve_html()
+        if method == "GET" and route.endswith("/api/unfiltered"):
+            return self._unfiltered_page(hdrs)
         if method == "POST" and path == "/api/re-render":
             return self._re_render()
         if method == "POST" and path == "/api/mark-read":
@@ -116,11 +128,42 @@ class NewsModule:
                 config=config.render,
                 output_path=self.output_path,
                 api_base=self.prefix,
+                db_path=self.db_path,
+                app_config=config,
+                repo_root=self.repo_path,
             )
             return 200, "application/json", _json({"ok": True, "rendered": count})
         except Exception as exc:
             logger.error("Re-render failed: %s", exc, exc_info=True)
             return 500, "application/json", _json({"ok": False, "error": str(exc)})
+
+    def _unfiltered_page(self, headers: dict) -> Response:
+        """Paginated JSON of all items (read/dropped included). page is 1-based."""
+        from src.db import UNFILTERED_PAGE_SIZE
+
+        qs = parse_qs(headers.get("X-Query-String", ""))
+        try:
+            page = max(1, int(qs.get("page", ["1"])[0]))
+        except (TypeError, ValueError):
+            page = 1
+        try:
+            from src import db as database
+            total = database.count_all_items(self.db_path)
+            offset = (page - 1) * UNFILTERED_PAGE_SIZE
+            items = database.get_all_items_page(
+                self.db_path, limit=UNFILTERED_PAGE_SIZE, offset=offset
+            )
+        except Exception as exc:
+            logger.error("unfiltered page failed: %s", exc, exc_info=True)
+            return 500, "application/json", _json({"ok": False, "error": str(exc)})
+        payload = {
+            "ok": True,
+            "page": page,
+            "page_size": UNFILTERED_PAGE_SIZE,
+            "total": total,
+            "items": items,
+        }
+        return 200, "application/json", _json(payload)
 
     def _mark_read(self, body: bytes) -> Response:
         data = _parse_json(body)

@@ -232,6 +232,29 @@ def test_get_recent_items(db_path: Path):
     assert len(items) == 3
 
 
+def test_count_all_items_and_unfiltered_page(db_path: Path):
+    from src.db import count_all_items, get_all_items_page, upsert_item
+
+    assert count_all_items(db_path) == 0
+    for i in range(5):
+        upsert_item(
+            db_path,
+            NormalizedItem(
+                source_id="g",
+                source_type="rss",
+                title=f"All {i}",
+                url=f"https://example.com/all{i}",
+            ),
+        )
+    assert count_all_items(db_path) == 5
+    p1 = get_all_items_page(db_path, limit=2, offset=0)
+    p2 = get_all_items_page(db_path, limit=2, offset=2)
+    assert len(p1) == 2
+    assert len(p2) == 2
+    ids = {r["id"] for r in p1} | {r["id"] for r in p2}
+    assert len(ids) == 4
+
+
 def test_mark_run_start_and_end(db_path: Path):
     from src.db import mark_run_end, mark_run_start
 

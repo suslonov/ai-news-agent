@@ -76,3 +76,12 @@ def get_playwright_user_data_dir() -> Optional[Path]:
 def project_root() -> Path:
     """Return the project root directory."""
     return _PROJECT_ROOT
+
+
+def resolve_repo_path(path_str: str, repo_root: Path | None = None) -> Path:
+    """Expand ``~`` and resolve ``path_str``. Relative paths are anchored to ``repo_root`` (default: project root)."""
+    root = repo_root or _PROJECT_ROOT
+    p = Path(os.path.expanduser(str(path_str).strip()))
+    if p.is_absolute():
+        return p.resolve()
+    return (root / p).resolve()

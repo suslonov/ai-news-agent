@@ -313,6 +313,19 @@
     .source-list a { color: var(--text); text-decoration: none; }
     .source-list a:hover { color: var(--accent); }
     .source-date { color: var(--muted); font-size: 0.72rem; flex-shrink: 0; }
+    .uf-line { flex: 1; min-width: 0; }
+    .uf-inline { display: block; font-size: 0.72rem; color: var(--muted); margin-top: 0.1rem; }
+
+    .unfiltered-pager {
+      display: flex; align-items: center; justify-content: center; gap: 0.75rem; flex-wrap: wrap;
+      margin-bottom: 1rem; font-size: 0.82rem; color: var(--muted);
+    }
+    .unfiltered-pager button {
+      font-size: 0.78rem; padding: 0.35rem 0.85rem; border-radius: 6px; border: 1px solid var(--border);
+      background: var(--surface); cursor: pointer; color: var(--text);
+    }
+    .unfiltered-pager button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+    .unfiltered-pager button:disabled { opacity: 0.38; cursor: not-allowed; }
 
     /* ── Image highlights ───────────────────────────────────────────── */
     .image-grid {
@@ -483,6 +496,7 @@
     <button class="tab" id="tab-saved" onclick="switchTab('saved')">
       Saved{% if saved_items %} <span style="font-size:0.7em;opacity:.7">({{ saved_items | length }})</span>{% endif %}
     </button>
+    <button class="tab" id="tab-unfiltered" onclick="switchTab('unfiltered')">Unfiltered</button>
   </div>
 
   <button class="btn-rerender" id="btn-rerender" title="Re-render from current database">
@@ -617,7 +631,7 @@
     </section>
     {% endif %}
 
-    {% if not top_stories and not latest_items %}
+    {% if not has_recent_content %}
     <div class="empty">No items to display. Run the pipeline to collect news.</div>
     {% endif %}
 
@@ -642,6 +656,41 @@
     </section>
   </div>
 
+  {# ── UNFILTERED (full DB archive, paginated) ─────────────────────── #}
+  <div id="view-unfiltered" style="display:none" data-uf-total="{{ unfiltered_total }}">
+    <section class="section">
+      <div class="section-header">
+        <h2 class="section-title">📚 Unfiltered</h2>
+        <span class="section-count" id="uf-total-label">{{ unfiltered_total }} in DB</span>
+      </div>
+      {% if unfiltered_total == 0 %}
+      <div class="empty">No articles in the database yet.</div>
+      {% else %}
+      {% set uf_ps = unfiltered_boot.page_size %}
+      {% set uf_tp = ((unfiltered_total + uf_ps - 1) // uf_ps) if unfiltered_total else 1 %}
+      <p style="font-size:0.85rem;color:var(--muted);margin:0 0 0.75rem">All rows from SQLite (any status, read or not). {{ uf_ps }} per page.</p>
+      <div class="unfiltered-pager" id="unfiltered-pager">
+        <button type="button" id="uf-prev" disabled>Previous</button>
+        <span id="uf-page-label">Page 1 of {{ uf_tp }}</span>
+        <button type="button" id="uf-next"{% if unfiltered_total <= uf_ps %} disabled{% endif %}>Next</button>
+      </div>
+      <div class="source-group">
+        <ul class="source-list" id="unfiltered-list">
+          {% for item in unfiltered_initial %}
+          <li data-title="{{ item.title | lower }}">
+            <span class="source-date">{{ item.published_at | fmt_date if item.published_at else "–" }}</span>
+            <div class="uf-line">
+              <a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.title }}</a>
+              <span class="uf-inline">{{ item.source_id }} · {{ item.status or "?" }}{% if item.is_read %} · read{% endif %}{% if item.is_saved %} · saved{% endif %}</span>
+            </div>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+    </section>
+  </div>
+
 </div>{# /wrapper #}
 
 <script>
@@ -649,29 +698,145 @@
   "use strict";
 
   const API_BASE = "{{ api_base }}";
+  const UF_BOOT = {{ unfiltered_boot | tojson }};
+
+  /** True when HTML is served under a hub prefix (API_BASE patched); do not use UF_BOOT.has_api alone. */
+  function ufHasApi() {
+    return Boolean(String(API_BASE || "").trim());
+  }
+
+  function ufFmtDate(iso) {
+    if (!iso) return "–";
+    const s = String(iso);
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) return s.slice(0, 10);
+    const mo = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][parseInt(m[2], 10) - 1];
+    return `${mo} ${parseInt(m[3], 10)}, ${m[1]}`;
+  }
+
+  function ufMetaParts(it) {
+    const bits = [it.source_id || "?", it.status || "?"];
+    if (it.is_read) bits.push("read");
+    if (it.is_saved) bits.push("saved");
+    return bits.join(" · ");
+  }
+
+  function ufFillRows(items) {
+    const ul = document.getElementById("unfiltered-list");
+    if (!ul) return;
+    ul.textContent = "";
+    for (const it of items) {
+      const li = document.createElement("li");
+      li.dataset.title = String(it.title || "").toLowerCase();
+      const dateSpan = document.createElement("span");
+      dateSpan.className = "source-date";
+      dateSpan.textContent = ufFmtDate(it.published_at);
+      const wrap = document.createElement("div");
+      wrap.className = "uf-line";
+      const a = document.createElement("a");
+      a.href = it.url || "#";
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.textContent = it.title || "–";
+      const meta = document.createElement("span");
+      meta.className = "uf-inline";
+      meta.textContent = ufMetaParts(it);
+      wrap.appendChild(a);
+      wrap.appendChild(meta);
+      li.appendChild(dateSpan);
+      li.appendChild(wrap);
+      ul.appendChild(li);
+    }
+  }
+
+  function ufTotalPages(total, pageSize) {
+    if (!total || total <= 0) return 1;
+    return Math.ceil(total / pageSize);
+  }
+
+  function ufUpdatePager(page, total, pageSize) {
+    const prev = document.getElementById("uf-prev");
+    const next = document.getElementById("uf-next");
+    const label = document.getElementById("uf-page-label");
+    const tp = ufTotalPages(total, pageSize);
+    if (label) label.textContent = `Page ${page} of ${tp}`;
+    if (prev) prev.disabled = page <= 1;
+    if (next) {
+      const canFetchMore = ufHasApi() && page * pageSize < total;
+      next.disabled = !canFetchMore;
+    }
+  }
+
+  let ufPage = UF_BOOT.page || 1;
+  let ufTotal = typeof UF_BOOT.total === "number" ? UF_BOOT.total : 0;
+  const ufPageSize = UF_BOOT.page_size || 100;
+  let ufServerHydrateTried = false;
+
+  async function ufLoadPage(page) {
+    if (!ufHasApi()) return;
+    const prev = document.getElementById("uf-prev");
+    const next = document.getElementById("uf-next");
+    if (prev) prev.disabled = true;
+    if (next) next.disabled = true;
+    try {
+      const u = API_BASE + "/api/unfiltered?page=" + encodeURIComponent(String(page));
+      const resp = await fetch(u);
+      if (!resp.ok) throw new Error(String(resp.status));
+      const data = await resp.json();
+      if (!data.ok) throw new Error(data.error || "bad payload");
+      ufPage = data.page;
+      ufTotal = data.total;
+      ufFillRows(data.items || []);
+    } catch (e) {
+      console.warn("Unfiltered page load failed:", e);
+    } finally {
+      ufUpdatePager(ufPage, ufTotal, ufPageSize);
+    }
+  }
+
+  document.getElementById("uf-prev")?.addEventListener("click", () => {
+    if (ufPage <= 1) return;
+    if (ufHasApi()) ufLoadPage(ufPage - 1);
+  });
+  document.getElementById("uf-next")?.addEventListener("click", () => {
+    if (ufPage * ufPageSize >= ufTotal) return;
+    if (ufHasApi()) ufLoadPage(ufPage + 1);
+  });
+
+  ufUpdatePager(ufPage, ufTotal, ufPageSize);
 
   /* ── Tab switching ──────────────────────────────────────────────── */
   window.switchTab = function (tab) {
     document.getElementById("view-recent").style.display = tab === "recent" ? "" : "none";
-    document.getElementById("view-saved").style.display  = tab === "saved"  ? "" : "none";
+    document.getElementById("view-saved").style.display = tab === "saved" ? "" : "none";
+    const vu = document.getElementById("view-unfiltered");
+    if (vu) vu.style.display = tab === "unfiltered" ? "" : "none";
     document.getElementById("tab-recent").classList.toggle("active", tab === "recent");
-    document.getElementById("tab-saved").classList.toggle("active",  tab === "saved");
+    document.getElementById("tab-saved").classList.toggle("active", tab === "saved");
+    const tu = document.getElementById("tab-unfiltered");
+    if (tu) tu.classList.toggle("active", tab === "unfiltered");
     sessionStorage.setItem("ai-news-tab", tab);
     const search = document.getElementById("search-input");
     if (search) {
       const onSaved = tab === "saved";
-      search.disabled = onSaved;
-      search.placeholder = onSaved ? "Search disabled on Saved" : "Filter articles…";
-      if (onSaved) {
+      const onUnf = tab === "unfiltered";
+      search.disabled = onSaved || onUnf;
+      search.placeholder = onSaved ? "Search disabled on Saved" : onUnf ? "Search disabled on Unfiltered" : "Filter articles…";
+      if (onSaved || onUnf) {
         search.value = "";
         filterCards("");
       }
+    }
+    if (tab === "unfiltered" && UF_BOOT.from_items_fallback && ufHasApi() && !ufServerHydrateTried) {
+      ufServerHydrateTried = true;
+      ufLoadPage(1);
     }
   };
 
   // Restore last active tab
   const savedTab = sessionStorage.getItem("ai-news-tab");
   if (savedTab === "saved") switchTab("saved");
+  else if (savedTab === "unfiltered") switchTab("unfiltered");
 
   /* ── Re-render ──────────────────────────────────────────────────── */
   const rerenderBtn = document.getElementById("btn-rerender");

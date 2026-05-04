@@ -30,7 +30,7 @@ except ImportError:
     pass
 
 from src import pipeline
-from src.settings import load_config, project_root
+from src.settings import load_config, project_root, resolve_repo_path
 
 logging.basicConfig(
     level=logging.INFO,
@@ -80,8 +80,8 @@ def main() -> int:
     config_path = args.config or (root / "config" / "sources.yaml")
     config = load_config(config_path)
 
-    db_path = Path(os.path.expanduser(config.global_config.db_path))
-    output_path = Path(os.path.expanduser(config.global_config.output_html))
+    db_path = resolve_repo_path(config.global_config.db_path, root)
+    output_path = resolve_repo_path(config.global_config.output_html, root)
 
     if args.serve:
         from src.server import serve

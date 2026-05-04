@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
 
-from src.models import RenderConfig
+from src.models import NormalizedItem, RenderConfig
 from src.render import render_html, _fmt_date, _from_json, _pick_top_stories
+
+
+def _recent_published(days_ago: int = 1) -> str:
+    return (datetime.now(timezone.utc) - timedelta(days=days_ago)).replace(microsecond=0).isoformat()
 
 
 def _make_item(
@@ -24,8 +29,9 @@ def _make_item(
     annotation: str | None = None,
     topic: str | None = None,
     tags_json: str | None = None,
-    published_at: str | None = "2025-04-14T12:00:00",
+    published_at: str | None = None,
 ) -> dict:
+    pub = published_at if published_at is not None else _recent_published(1)
     return {
         "id": id,
         "title": title,
@@ -39,7 +45,7 @@ def _make_item(
         "annotation": annotation,
         "topic": topic,
         "tags_json": tags_json or "[]",
-        "published_at": published_at,
+        "published_at": pub,
         "content_snippet": "A snippet of content.",
         "why_it_matters": None,
     }
@@ -111,6 +117,69 @@ def test_saved_items_excluded_from_top_stories_ranking(tmp_path: Path):
     assert "Saved Headline Flagged Top" not in top_block
 
 
+def test_saved_excluded_from_latest_section(tmp_path: Path):
+    items = [
+        _make_item(id=1, title="Shows In Latest", is_saved=0, is_top_story=0, priority_score=0),
+        _make_item(id=2, title="Saved Not In Latest", is_saved=1, is_top_story=0),
+    ]
+    output = tmp_path / "index.html"
+    render_html(items, _make_config(), output)
+    html = output.read_text()
+    marker = '<section class="section" data-section="latest">'
+    idx = html.find(marker)
+    assert idx >= 0
+    end = html.find("</section>", idx + len(marker))
+    assert end > idx
+    latest_block = html[idx:end]
+    assert "Shows In Latest" in latest_block
+    assert "Saved Not In Latest" not in latest_block
+    vs = html.find('id="view-saved"')
+    assert vs >= 0
+    assert "Saved Not In Latest" in html[vs : vs + 8000]
+
+
+def test_old_unsaved_in_by_source_not_in_latest_cards(tmp_path: Path):
+    """Non-saved past keep_days stay in By Source; saved past keep_days only on Saved tab."""
+    old_pub = (datetime.now(timezone.utc) - timedelta(days=60)).replace(microsecond=0).isoformat()
+    items = [
+        _make_item(
+            id=1,
+            title="Stale Bookmark",
+            is_saved=1,
+            published_at=old_pub,
+            source_id="one_src",
+        ),
+        _make_item(
+            id=2,
+            title="Old Unsaved List Row",
+            is_saved=0,
+            published_at=old_pub,
+            source_id="one_src",
+            priority_score=0,
+        ),
+        _make_item(id=3, title="Fresh Row", is_saved=0, source_id="one_src", priority_score=0),
+    ]
+    output = tmp_path / "index.html"
+    render_html(items, _make_config(keep_days=14), output)
+    html = output.read_text()
+    lm = '<section class="section" data-section="latest">'
+    li = html.find(lm)
+    assert li >= 0
+    lend = html.find("</section>", li + len(lm))
+    latest_block = html[li:lend]
+    assert "Stale Bookmark" not in latest_block
+    assert "Old Unsaved List Row" not in latest_block
+    assert "Fresh Row" in latest_block
+    by_idx = html.find('data-section="by_source"')
+    assert by_idx >= 0
+    by_end = html.find("</section>", by_idx)
+    by_block = html[by_idx:by_end]
+    assert "Old Unsaved List Row" in by_block
+    assert "Stale Bookmark" not in by_block
+    assert "Fresh Row" in html
+    assert "Stale Bookmark" in html
+
+
 def test_render_html_contains_by_source_section(tmp_path: Path):
     items = [_make_item(source_id="openai_news")]
     output = tmp_path / "index.html"
@@ -134,6 +203,67 @@ def test_render_html_empty_items(tmp_path: Path):
     html = output.read_text()
     assert count == 0
     assert "No items to display" in html
+
+
+def test_render_unfiltered_resolves_relative_db_against_repo(tmp_path: Path):
+    """Relative db_path must resolve against repo_root (not process cwd)."""
+    from src.db import init_db, upsert_item
+
+    repo = tmp_path / "repo"
+    (repo / "data").mkdir(parents=True)
+    dbp = repo / "data" / "state.db"
+    init_db(dbp)
+    upsert_item(
+        dbp,
+        NormalizedItem(
+            source_id="rel",
+            source_type="rss",
+            title="Relative Path Row",
+            url="https://example.com/rel",
+        ),
+    )
+    out = tmp_path / "out.html"
+    render_html(
+        [],
+        _make_config(),
+        out,
+        db_path="data/state.db",
+        repo_root=repo,
+    )
+    html = out.read_text()
+    assert "Relative Path Row" in html
+
+
+def test_render_unfiltered_tab_from_db(tmp_path: Path):
+    from src.db import init_db, upsert_item
+
+    dbp = tmp_path / "uf.db"
+    init_db(dbp)
+    upsert_item(
+        dbp,
+        NormalizedItem(
+            source_id="src_x",
+            source_type="rss",
+            title="Archive Row One",
+            url="https://example.com/u1",
+        ),
+    )
+    upsert_item(
+        dbp,
+        NormalizedItem(
+            source_id="src_x",
+            source_type="rss",
+            title="Dropped Old",
+            url="https://example.com/u2",
+        ),
+    )
+    output = tmp_path / "index.html"
+    render_html([], _make_config(), output, db_path=dbp)
+    html = output.read_text()
+    assert "Unfiltered" in html
+    assert "Archive Row One" in html
+    assert "Dropped Old" in html
+    assert "view-unfiltered" in html
 
 
 def test_render_html_filters_dropped(tmp_path: Path):

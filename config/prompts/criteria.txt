@@ -1,1 +1,3 @@
-criteria for better selection
+Prioritise articles focused on AI and machine learning research, engineering, and applications — including model releases, technical breakthroughs, industry developments, new tools or frameworks, and policy or safety discussions directly related to AI/ML systems. Articles from technical blogs, research labs, arXiv, and reputable tech outlets covering these topics should rank highly.
+
+Deprioritise or drop articles that are unrelated to AI or ML, even if they come from otherwise credible scientific sources. Specifically avoid general science and nature content (ecology, biology, medicine, climate), career advice or soft-skills pieces from science publications, and biomedical research unless it has a clear and direct AI/ML component. The source being scientific or prestigious is not sufficient justification for inclusion — topic relevance to AI/ML must be the primary filter.

@@ -14,7 +14,7 @@ from src.collectors import arxiv, medium_browser, medium_rss, rss_generic, rsshu
 from src.models import AppConfig, NormalizedItem, RunStats
 from src.claude.summarize import annotate_batch, apply_annotations
 from src.claude.distill import distill_criteria
-from src.settings import get_anthropic_api_key
+from src.settings import get_anthropic_api_key, project_root
 from src.x_graph import scanner as x_graph_scanner
 
 logger = logging.getLogger(__name__)
@@ -206,6 +206,9 @@ def run_pipeline(
         config=config.render,
         output_path=output_path,
         last_run_at=last_run_at,
+        db_path=db_path,
+        app_config=config,
+        repo_root=project_root(),
     )
     stats = stats.model_copy(update={"rendered_count": rendered_count})
 
