@@ -234,6 +234,18 @@ def test_render_unfiltered_resolves_relative_db_against_repo(tmp_path: Path):
     assert "Relative Path Row" in html
 
 
+def test_render_empty_api_base_uf_has_api_uses_http_protocol(tmp_path: Path):
+    """Standalone serve uses API_BASE ''; pagination uses non-file protocol check and data-uf-total fallback."""
+    output = tmp_path / "index.html"
+    render_html([_make_item()], _make_config(), output, api_base="")
+    html = output.read_text()
+    assert 'const API_BASE = "";' in html
+    assert "window.location.protocol" in html
+    assert "ufUnfilteredListUrl" in html
+    assert "/api/unfiltered/p/" in html
+    assert "dataset.ufTotal" in html
+
+
 def test_render_unfiltered_tab_from_db(tmp_path: Path):
     from src.db import init_db, upsert_item
 

@@ -700,9 +700,40 @@
   const API_BASE = "{{ api_base }}";
   const UF_BOOT = {{ unfiltered_boot | tojson }};
 
-  /** True when HTML is served under a hub prefix (API_BASE patched); do not use UF_BOOT.has_api alone. */
+  /** True when same-origin fetch to /api/... may work: hub prefix set, or page not opened as file:// (http(s), vscode-webview, app custom schemes, etc.). */
   function ufHasApi() {
-    return Boolean(String(API_BASE || "").trim());
+    if (String(API_BASE || "").trim()) return true;
+    try {
+      return (window.location.protocol || "").toLowerCase() !== "file:";
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function ufInt(v, fallback) {
+    const n = parseInt(String(v), 10);
+    return Number.isFinite(n) ? n : fallback;
+  }
+
+  /** 1-based page index for API calls (avoids 0 so Next never requests page 1 twice by mistake). */
+  function ufPositivePage(v) {
+    const n = parseInt(String(v), 10);
+    if (!Number.isFinite(n) || n < 1) return 1;
+    return n;
+  }
+
+  function ufNonNegInt(v, fallback) {
+    const n = Number(v);
+    if (!Number.isFinite(n) || n < 0) return fallback;
+    return Math.floor(n);
+  }
+
+  /** Path form `/api/unfiltered/p/N` so page survives proxies; query `?page=` kept server-side as fallback. */
+  function ufUnfilteredListUrl(page) {
+    const base = String(API_BASE || "").trim().replace(/\/$/, "");
+    const n = ufPositivePage(page);
+    const path = `${base}/api/unfiltered/p/${n}`;
+    return new URL(path, window.location.href).href;
   }
 
   function ufFmtDate(iso) {
@@ -711,7 +742,8 @@
     const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
     if (!m) return s.slice(0, 10);
     const mo = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][parseInt(m[2], 10) - 1];
-    return `${mo} ${parseInt(m[3], 10)}, ${m[1]}`;
+    const day = String(parseInt(m[3], 10)).padStart(2, "0");
+    return `${mo} ${day}, ${m[1]}`;
   }
 
   function ufMetaParts(it) {
@@ -767,9 +799,13 @@
     }
   }
 
-  let ufPage = UF_BOOT.page || 1;
-  let ufTotal = typeof UF_BOOT.total === "number" ? UF_BOOT.total : 0;
-  const ufPageSize = UF_BOOT.page_size || 100;
+  const ufView = document.getElementById("view-unfiltered");
+  const ufDomTotal = ufView ? ufNonNegInt(ufView.dataset.ufTotal, NaN) : NaN;
+  let ufPage = ufPositivePage(UF_BOOT.page);
+  let ufTotal = ufNonNegInt(UF_BOOT.total, NaN);
+  if (!Number.isFinite(ufTotal) && Number.isFinite(ufDomTotal)) ufTotal = ufDomTotal;
+  if (!Number.isFinite(ufTotal)) ufTotal = 0;
+  const ufPageSize = ufInt(UF_BOOT.page_size, 100) || 100;
   let ufServerHydrateTried = false;
 
   async function ufLoadPage(page) {
@@ -778,14 +814,15 @@
     const next = document.getElementById("uf-next");
     if (prev) prev.disabled = true;
     if (next) next.disabled = true;
+    const want = ufPositivePage(page);
     try {
-      const u = API_BASE + "/api/unfiltered?page=" + encodeURIComponent(String(page));
-      const resp = await fetch(u);
+      const resp = await fetch(ufUnfilteredListUrl(want), { cache: "no-store" });
       if (!resp.ok) throw new Error(String(resp.status));
       const data = await resp.json();
       if (!data.ok) throw new Error(data.error || "bad payload");
-      ufPage = data.page;
-      ufTotal = data.total;
+      ufPage = ufPositivePage(data.page);
+      const t = ufNonNegInt(data.total, NaN);
+      if (Number.isFinite(t)) ufTotal = t;
       ufFillRows(data.items || []);
     } catch (e) {
       console.warn("Unfiltered page load failed:", e);
@@ -795,12 +832,16 @@
   }
 
   document.getElementById("uf-prev")?.addEventListener("click", () => {
-    if (ufPage <= 1) return;
-    if (ufHasApi()) ufLoadPage(ufPage - 1);
+    const p = ufPositivePage(ufPage);
+    if (p <= 1) return;
+    if (ufHasApi()) ufLoadPage(p - 1);
   });
   document.getElementById("uf-next")?.addEventListener("click", () => {
-    if (ufPage * ufPageSize >= ufTotal) return;
-    if (ufHasApi()) ufLoadPage(ufPage + 1);
+    const p = ufPositivePage(ufPage);
+    const ps = ufInt(ufPageSize, 100) || 100;
+    const t = ufNonNegInt(ufTotal, 0);
+    if (p * ps >= t) return;
+    if (ufHasApi()) ufLoadPage(p + 1);
   });
 
   ufUpdatePager(ufPage, ufTotal, ufPageSize);
@@ -842,9 +883,9 @@
   const rerenderBtn = document.getElementById("btn-rerender");
   const rerenderIcon = document.getElementById("rerender-icon");
 
-  rerenderBtn.addEventListener("click", async () => {
+  rerenderBtn?.addEventListener("click", async () => {
     rerenderBtn.disabled = true;
-    rerenderIcon.classList.add("spinning");
+    rerenderIcon?.classList.add("spinning");
     rerenderBtn.lastChild.textContent = " Refreshing…";
     try {
       const resp = await fetch(API_BASE + "/api/re-render", { method: "POST" });
@@ -854,7 +895,7 @@
         rerenderBtn.lastChild.textContent = " Failed";
         setTimeout(() => {
           rerenderBtn.disabled = false;
-          rerenderIcon.classList.remove("spinning");
+          rerenderIcon?.classList.remove("spinning");
           rerenderBtn.lastChild.textContent = " Refresh";
         }, 2000);
       }
@@ -862,7 +903,7 @@
       rerenderBtn.lastChild.textContent = " No server";
       setTimeout(() => {
         rerenderBtn.disabled = false;
-        rerenderIcon.classList.remove("spinning");
+        rerenderIcon?.classList.remove("spinning");
         rerenderBtn.lastChild.textContent = " Refresh";
       }, 2500);
     }

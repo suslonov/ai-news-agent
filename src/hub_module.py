@@ -5,7 +5,8 @@ Can also be used standalone via src.server (prefix="").
 
 The module handles:
   GET  /                      → serve rendered HTML
-  GET  /api/unfiltered?page=N → JSON page of all DB rows (100 per page)
+  GET  /api/unfiltered/p/N    → JSON page N of all DB rows (100 per page; preferred for fetch)
+  GET  /api/unfiltered?page=N → same (query form kept for compatibility)
   POST /api/re-render         → re-render HTML from current DB state
   POST /api/mark-read         → mark item read/unread
   POST /api/save              → save/unsave item
@@ -31,6 +32,9 @@ _API_BASE_ASSIGN = re.compile(
     rb'^(\s*)const API_BASE = "[^"]*";',
     re.MULTILINE,
 )
+
+# Page index in the path avoids lost query strings on some proxies / wrappers.
+_UNFILTERED_PAGE_IN_PATH = re.compile(r"/api/unfiltered/p/(\d+)$")
 
 
 def _patch_served_html_api_base(content: bytes, prefix: str) -> bytes:
@@ -86,8 +90,8 @@ class NewsModule:
         route = path.rstrip("/") or "/"
         if method in ("GET", "HEAD") and route in ("", "/", "/index.html"):
             return self._serve_html()
-        if method == "GET" and route.endswith("/api/unfiltered"):
-            return self._unfiltered_page(hdrs)
+        if method == "GET" and (route.endswith("/api/unfiltered") or _UNFILTERED_PAGE_IN_PATH.search(route)):
+            return self._unfiltered_page(route, hdrs)
         if method == "POST" and path == "/api/re-render":
             return self._re_render()
         if method == "POST" and path == "/api/mark-read":
@@ -137,15 +141,22 @@ class NewsModule:
             logger.error("Re-render failed: %s", exc, exc_info=True)
             return 500, "application/json", _json({"ok": False, "error": str(exc)})
 
-    def _unfiltered_page(self, headers: dict) -> Response:
+    def _unfiltered_page(self, route: str, headers: dict) -> Response:
         """Paginated JSON of all items (read/dropped included). page is 1-based."""
         from src.db import UNFILTERED_PAGE_SIZE
 
-        qs = parse_qs(headers.get("X-Query-String", ""))
-        try:
-            page = max(1, int(qs.get("page", ["1"])[0]))
-        except (TypeError, ValueError):
-            page = 1
+        m = _UNFILTERED_PAGE_IN_PATH.search(route)
+        if m:
+            try:
+                page = max(1, int(m.group(1)))
+            except ValueError:
+                page = 1
+        else:
+            qs = parse_qs(headers.get("X-Query-String", ""))
+            try:
+                page = max(1, int(qs.get("page", ["1"])[0]))
+            except (TypeError, ValueError):
+                page = 1
         try:
             from src import db as database
             total = database.count_all_items(self.db_path)
