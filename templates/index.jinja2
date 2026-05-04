@@ -824,6 +824,8 @@
       const t = ufNonNegInt(data.total, NaN);
       if (Number.isFinite(t)) ufTotal = t;
       ufFillRows(data.items || []);
+      const si = document.getElementById("search-input");
+      filterCards(si ? si.value : "");
     } catch (e) {
       console.warn("Unfiltered page load failed:", e);
     } finally {
@@ -860,12 +862,17 @@
     const search = document.getElementById("search-input");
     if (search) {
       const onSaved = tab === "saved";
-      const onUnf = tab === "unfiltered";
-      search.disabled = onSaved || onUnf;
-      search.placeholder = onSaved ? "Search disabled on Saved" : onUnf ? "Search disabled on Unfiltered" : "Filter articles…";
-      if (onSaved || onUnf) {
+      search.disabled = onSaved;
+      search.placeholder = onSaved
+        ? "Search disabled on Saved"
+        : tab === "unfiltered"
+          ? "Filter this page (title, source, status)…"
+          : "Filter articles…";
+      if (onSaved) {
         search.value = "";
         filterCards("");
+      } else {
+        filterCards(search.value);
       }
     }
     if (tab === "unfiltered" && UF_BOOT.from_items_fallback && ufHasApi() && !ufServerHydrateTried) {
@@ -1075,18 +1082,30 @@
 
   function filterCards(query) {
     const q = query.toLowerCase().trim();
-    document.querySelectorAll(".card, .source-list li").forEach(el => {
-      if (el.closest("#view-saved")) return;
-      const title  = (el.dataset.title  || el.querySelector("a")?.textContent || "").toLowerCase();
+    const tab = sessionStorage.getItem("ai-news-tab") || "recent";
+    if (tab === "saved") return;
+
+    if (tab === "unfiltered") {
+      document.querySelectorAll("#view-unfiltered .source-list li").forEach((el) => {
+        const title = (el.dataset.title || el.querySelector("a")?.textContent || "").toLowerCase();
+        const meta = (el.querySelector(".uf-inline")?.textContent || "").toLowerCase();
+        const hay = `${title} ${meta}`;
+        el.style.display = !q || hay.includes(q) ? "" : "none";
+      });
+      return;
+    }
+
+    document.querySelectorAll("#view-recent .card, #view-recent .source-list li").forEach((el) => {
+      const title = (el.dataset.title || el.querySelector("a")?.textContent || "").toLowerCase();
       const source = (el.dataset.source || "").toLowerCase();
-      const topic  = (el.dataset.topic  || "").toLowerCase();
-      el.style.display = (!q || title.includes(q) || source.includes(q) || topic.includes(q)) ? "" : "none";
+      const topic = (el.dataset.topic || "").toLowerCase();
+      el.style.display = !q || title.includes(q) || source.includes(q) || topic.includes(q) ? "" : "none";
     });
-    document.querySelectorAll("#view-recent .section").forEach(section => {
+    document.querySelectorAll("#view-recent .section").forEach((section) => {
       const visible = section.querySelectorAll(
         ".card:not([style*='display: none']), .source-list li:not([style*='display: none'])"
       );
-      section.style.display = (visible.length === 0 && q) ? "none" : "";
+      section.style.display = visible.length === 0 && q ? "none" : "";
     });
   }
 

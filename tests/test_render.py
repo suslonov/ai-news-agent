@@ -276,6 +276,7 @@ def test_render_unfiltered_tab_from_db(tmp_path: Path):
     assert "Archive Row One" in html
     assert "Dropped Old" in html
     assert "view-unfiltered" in html
+    assert "Filter this page" in html
 
 
 def test_render_html_filters_dropped(tmp_path: Path):
