@@ -449,9 +449,16 @@
     {% endif %}
 
     {% set all_tags = (item.tags_json | from_json) if item.tags_json else [] %}
-    {% if all_tags %}
+    {% set hidden_meta_tags = ['secondary', 'medium_browser_eligible'] %}
+    {% set display_tags = [] %}
+    {% for tag in all_tags %}
+      {% if tag and tag not in hidden_meta_tags %}
+        {% set _ = display_tags.append(tag) %}
+      {% endif %}
+    {% endfor %}
+    {% if display_tags %}
     <div class="card-tags">
-      {% for tag in all_tags[:6] %}
+      {% for tag in display_tags[:6] %}
       <span class="tag">{{ tag }}</span>
       {% endfor %}
     </div>
