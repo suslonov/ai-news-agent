@@ -299,6 +299,25 @@ def test_render_html_contains_search_box(tmp_path: Path):
     assert "search-input" in html
 
 
+def test_render_card_annotation_strips_medium_embed_html(tmp_path: Path):
+    """Medium RSS HTML in annotations must not render inline feed images in cards."""
+    items = [
+        _make_item(
+            annotation=(
+                '<img class="medium-feed-image" src="https://cdn.example.com/huge.jpg" '
+                'width="1400"> Real summary text here.'
+            ),
+            tags_json='["agents"]',
+        ),
+    ]
+    output = tmp_path / "index.html"
+    render_html(items, _make_config(sections=["latest"]), output)
+    html = output.read_text()
+    assert '<img class="medium-feed-image"' not in html
+    assert "card-annotation" in html
+    assert "Real summary text here" in html
+
+
 # ── Helper functions ───────────────────────────────────────────────────────────
 
 

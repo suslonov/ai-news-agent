@@ -46,7 +46,7 @@ def _from_json(value: Optional[str]) -> list:
 def _build_env(template_dir: Path) -> Environment:
     env = Environment(
         loader=FileSystemLoader(str(template_dir)),
-        autoescape=select_autoescape(["html"]),
+        autoescape=select_autoescape(["html", "jinja2", "jinja"]),
     )
     env.filters["fmt_date"] = _fmt_date
     env.filters["from_json"] = _from_json

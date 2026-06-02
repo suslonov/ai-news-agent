@@ -87,6 +87,17 @@ def _extract_image_from_entry(entry: feedparser.FeedParserDict) -> tuple[Optiona
     return None, ImageSourceType.none
 
 
+def _html_to_plain_text(html: str) -> str:
+    """Strip markup from feed summaries (e.g. Medium RSS embeds large inline images)."""
+    if not html:
+        return ""
+    if "<" not in html:
+        return html.strip()
+    from bs4 import BeautifulSoup
+
+    return BeautifulSoup(html, "lxml").get_text(separator=" ", strip=True)
+
+
 def _scrape_first_img_src(html: str) -> Optional[str]:
     """Extract the first <img src> from an HTML fragment."""
     m = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', html, re.IGNORECASE)
@@ -191,7 +202,7 @@ def normalize_entry(
     summary = entry.get("summary", "") or ""
     if isinstance(summary, list):
         summary = " ".join(s.get("value", "") for s in summary if isinstance(s, dict))
-    snippet = summary[:max_snippet_chars].strip()
+    snippet = _html_to_plain_text(summary)[:max_snippet_chars].strip()
 
     filter_text = f"{title} {snippet}"
     if not _passes_topic_filter(filter_text, filters):

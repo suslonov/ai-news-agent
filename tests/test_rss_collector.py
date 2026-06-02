@@ -63,6 +63,22 @@ def test_normalize_entry_basic():
     assert "test" in item.tags
 
 
+def test_normalize_entry_strips_html_from_summary():
+    source = _make_source()
+    entry = _make_entry(
+        summary=(
+            '<figure><img class="medium-feed-image" src="https://cdn.example.com/map.jpg"/>'
+            "</figure><p>Agentic enterprise trends for May 2026.</p>"
+        ),
+    )
+    item = normalize_entry(entry, source, _all_keywords_filter())
+    assert item is not None
+    assert item.content_snippet is not None
+    assert "medium-feed-image" not in item.content_snippet
+    assert "<img" not in item.content_snippet
+    assert "Agentic enterprise" in item.content_snippet
+
+
 def test_normalize_entry_missing_url_returns_none():
     source = _make_source()
     entry = _make_entry(link="")
